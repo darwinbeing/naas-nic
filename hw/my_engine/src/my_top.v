@@ -268,6 +268,33 @@ module my_top (
 
         end     // not reset
     end  //always
+
+    wire   [35:0]                  vio_control;
+    wire   [35:0]                  ila_control;
+    wire   [71:0]                  rxd_rxc;
+    wire   [8:0]                   as_sv;
+
+    chipscope_vio my_vio (
+        .CONTROL(vio_control), // INOUT BUS [35:0]
+        .CLK(xaui_clk_156_25_out), // IN
+        .SYNC_OUT(xaui_configuration_vector) // OUT BUS [6:0]
+        );
+
+    chipscope_ila my_ila (
+        .CONTROL(ila_control), // INOUT BUS [35:0]
+        .CLK(xaui_clk_156_25_out), // IN
+        .TRIG0(rxd_rxc), // IN BUS [71:0]
+        .TRIG1(as_sv) // I [8:0]
+        );
+
+    chipscope_icon my_icon (
+        .CONTROL0(vio_control), // INOUT BUS [35:0]
+        .CONTROL1(ila_control) // INOUT BUS [35:0]
+        );
+
+    assign rxd_rxc = {xgmii_rxd, xgmii_rxc};
+    assign as_sv = {xaui_align_status, xaui_status_vector};
+
     `endif
     ////////////////////////////////////////////////
     // INSTRUMENTATION
@@ -341,7 +368,7 @@ module my_top (
 
     // XAUI Configuration
     assign  xaui_signal_detect = 4'b1111;      //according to pg053
-    assign  xaui_configuration_vector = 7'b0;  //see pg053
+    //assign  xaui_configuration_vector = 7'b0;  //see pg053
 
     //-------------------------------------------------------
     // MAC
