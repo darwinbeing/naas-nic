@@ -32,7 +32,7 @@ module rx_tlp_trigger (
     //-------------------------------------------------------
     // Local timeout-generation
     //-------------------------------------------------------
-    reg     [27:0]   free_running;
+    reg     [3:0]    free_running;
     reg              timeout;   
 
     //-------------------------------------------------------
@@ -83,7 +83,7 @@ module rx_tlp_trigger (
     always @( posedge clk156 or negedge reset_n ) begin
         if (!reset_n ) begin  // reset
             timeout <= 1'b0;
-            free_running <= 28'b0;
+            free_running <= 'b0;
         end
         
         else begin  // not reset
@@ -91,13 +91,13 @@ module rx_tlp_trigger (
             if (main_fsm == s0) begin
                 free_running <= free_running +1;
                 timeout <= 1'b0;
-                if (free_running == 28'hFFFFFFF) begin
+                if (free_running == 'hF) begin
                     timeout <= 1'b1;
                 end
             end
             else begin
                 timeout <= 1'b0;
-                free_running <= 28'b0;
+                free_running <= 'b0;
             end
 
         end     // not reset
