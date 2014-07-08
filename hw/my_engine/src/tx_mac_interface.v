@@ -7,12 +7,13 @@ module tx_mac_interface (
     input    clk,
     input    reset_n,
 
-    // MAC Rx
-    output reg                tx_underrun,
-    output reg    [63:0]      tx_data,
-    output reg    [7:0]       tx_data_valid,
-    output reg                tx_start,
-    input                     tx_ack,
+    // MAC Tx
+    output reg    [63:0]      m_axis_tdata,
+    output reg    [7:0]       m_axis_tstrb,
+    output reg    [127:0]     m_axis_tuser,
+    output reg                m_axis_tvalid,
+    output reg                m_axis_tlast,
+    input                     m_axis_tready,
 
     // Internal memory driver
     output reg    [`BF:0]     rd_addr,
@@ -201,11 +202,9 @@ module tx_mac_interface (
     always @( posedge clk or negedge reset_n ) begin
 
         if (!reset_n ) begin  // reset
-            tx_underrun <= 1'b0;
+            m_axis_tvalid <= 1'b0;
+            m_axis_tlast <= 1'b0;
             rd_addr <= 'b0;
-            tx_start <= 1'b0;
-            tx_data_valid <= 'b0;
-            tx_data <= 'b0;
             synch <= 1'b0;
             end_of_eth_frame <= 1'b0;
             `ifdef INSTRUMENTATION
@@ -217,10 +216,8 @@ module tx_mac_interface (
         else begin  // not reset
             
             synch <= 1'b0;
-            tx_underrun <= 1'b0;
-            tx_start <= 1'b0;
-            tx_data_valid <= 'b0;
             rd_addr_prev0 <= rd_addr;
+            rd_addr_prev1 <= rd_addr_prev0;
             end_of_eth_frame <= 1'b0;
 
 ////////////////////////////////////////////////
@@ -246,17 +243,57 @@ module tx_mac_interface (
                 end
 
                 s1 : begin
-                    rd_addr_sof <= rd_addr_prev0;
                     rd_addr <= rd_addr +1;
-                    tx_start <= 1'b1;
                     tx_frame_fsm <= s2;
                 end
 
                 s2 : begin
-                    tx_data <= rd_data;
-                    tx_data_valid <= 'hFF;
+                    m_axis_tdata <= rd_data;
+                    m_axis_tstrb <= 'hFF;
+                    m_axis_tuser[31:0] <= {des_port, src_port, byte_counter};
+                    m_axis_tvalid <= 1'b1;
                     rd_addr <= rd_addr +1;
+                    qwords_sent <= 'h001;
                     tx_frame_fsm <= s3;
+                end
+
+                s3 : begin
+                    if (m_axis_tready) begin
+                        rd_addr <= rd_addr +1;
+                        m_axis_tdata <= rd_data;
+                        qwords_sent <= qwords_sent +1;
+                        if (qwords_in_eth == qwords_sent) begin
+                            synch <= 1'b1;
+                            end_of_eth_frame <= 1'b1;
+                            m_axis_tstrb <= last_tx_data_valid;
+                            rd_addr <= rd_addr;
+                            tx_frame_fsm <= s0;
+                        end
+                    end
+                    else begin
+                        tx_frame_fsm <= s4;
+                    end
+                end
+
+                s4 : begin
+                    rd_addr <= rd_addr_prev1;
+                    if (m_axis_tready) begin
+                        m_axis_tvalid <= 1'b0;
+                        tx_frame_fsm <= s5;
+                    end
+                end
+
+                s5 : begin
+                    rd_addr <= rd_addr +1;
+                    m_axis_tvalid <= 1'b1;
+                    tx_frame_fsm <= s6;
+                end
+
+                s6 : begin
+                    if (m_axis_tready) begin
+                        m_axis_tvalid <= 1'b0;
+                        tx_frame_fsm <= s5;
+                    end
                 end
 
                 s3 : begin

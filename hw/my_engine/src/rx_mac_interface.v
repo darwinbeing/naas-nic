@@ -9,10 +9,12 @@ module rx_mac_interface (
     input    reset_n,
 
     // MAC Rx
-    input    [63:0]      rx_data,
-    input    [7:0]       rx_data_valid,
-    input                rx_good_frame,
-    input                rx_bad_frame,
+    input    [63:0]      s_axis_tdata,
+    input    [7:0]       s_axis_tstrb,
+    input    [127:0]     s_axis_tuser,
+    input                s_axis_tvalid,
+    input                s_axis_tlast,
+    output reg           s_axis_tready,
 
     // Internal memory driver
     output reg    [`BF:0]     wr_addr,
@@ -36,15 +38,13 @@ module rx_mac_interface (
     // Local ethernet frame reception and memory write
     //-------------------------------------------------------
     reg     [7:0]     state;
-    reg     [31:0]    byte_counter;
+    reg     [15:0]    byte_counter;
     reg     [`BF:0]   aux_wr_addr;
     reg     [`BF:0]   diff;
     (* KEEP = "TRUE" *)reg     [31:0]   dropped_frames_counter;
+    reg     [7:0]     src_port;
+    reg     [7:0]     des_port;
     
-    reg     [7:0]    rx_data_valid_reg;
-    reg              rx_good_frame_reg;
-    reg              rx_bad_frame_reg;
-
     //-------------------------------------------------------
     // Local ts_sec-and-ts_nsec-generation
     //-------------------------------------------------------
@@ -115,99 +115,63 @@ module rx_mac_interface (
 
         if (!reset_n ) begin  // reset
             commited_wr_address <= 'b0;
+            aux_wr_addr <= 'b1;
             diff <= 'b0;
             dropped_frames_counter <= 32'b0;
-            wr_en <= 1'b0;
+            wr_en <= 1'b1;
+            s_axis_tready <= 1'b1;
             state <= s0;
         end
         
         else begin  // not reset
             
             diff <= aux_wr_addr + (~commited_rd_address_reg1) +1;
+            wr_en <= 1'b1;
             
             case (state)
 
-                s0 : begin                                  // configure mac core to present preamble and save the packet timestamp while its reception
-                    byte_counter <= 32'b0;
-                    aux_wr_addr <= commited_wr_address +1;
-                    wr_en <= 1'b0;
-                    if (rx_data_valid != 8'b0) begin      // wait for sof (preamble)
+                s0 : begin
+                    byte_counter <= s_axis_tuser[15:0];
+                    src_port <= s_axis_tuser[23:16];
+                    des_port <= s_axis_tuser[31:24];
+                    
+                    wr_data <= s_axis_tdata;
+                    wr_addr <= aux_wr_addr;
+                    if (s_axis_tvalid) begin      // wait for sof (preamble)
+                        aux_wr_addr <= aux_wr_addr +1;
                         state <= s1;
                     end
                 end
 
                 s1 : begin
-                    wr_data <= rx_data;
+                    wr_data <= s_axis_tdata;
                     wr_addr <= aux_wr_addr;
-                    wr_en <= 1'b1;
-                    aux_wr_addr <= aux_wr_addr +1;
-
-                    rx_data_valid_reg <= rx_data_valid;
-                    rx_good_frame_reg <= rx_good_frame;
-                    rx_bad_frame_reg <= rx_bad_frame;
-                    
-                    case (rx_data_valid)     // increment byte_counter accordingly
-                        8'b00000000 : begin
-                            byte_counter <= byte_counter;       // don't increment
-                            aux_wr_addr <= aux_wr_addr;
-                            wr_en <= 1'b0;
-                        end
-                        8'b00000001 : begin
-                            byte_counter <= byte_counter + 1;
-                        end
-                        8'b00000011 : begin
-                            byte_counter <= byte_counter + 2;
-                        end
-                        8'b00000111 : begin
-                            byte_counter <= byte_counter + 3;
-                        end
-                        8'b00001111 : begin
-                            byte_counter <= byte_counter + 4;
-                        end
-                        8'b00011111 : begin
-                            byte_counter <= byte_counter + 5;
-                        end
-                        8'b00111111 : begin
-                            byte_counter <= byte_counter + 6;
-                        end
-                        8'b01111111 : begin
-                            byte_counter <= byte_counter + 7;
-                        end
-                        8'b11111111 : begin
-                            byte_counter <= byte_counter + 8;
-                        end
-                    endcase
+                    if (s_axis_tvalid) begin
+                        aux_wr_addr <= aux_wr_addr +1;
+                    end
 
                     if (diff[`BF:0] > `MAX_DIFF) begin         // buffer is more than 90%
                         state <= s3;
                     end
-                    else if (rx_good_frame) begin        // eof (good frame)
+                    else if (s_axis_tlast && s_axis_tvalid) begin
+                        s_axis_tready <= 1'b0;
                         state <= s2;
-                    end
-                    else if (rx_bad_frame) begin
-                        state <= s0;
                     end
                 end
 
                 s2 : begin
-                    wr_data <= {byte_counter, 32'b0};
+                    wr_data <= {des_port, src_port, byte_counter, 32'b0};
                     wr_addr <= commited_wr_address;
-                    wr_en <= 1'b1;
 
                     commited_wr_address <= aux_wr_addr;                      // commit the packet
                     aux_wr_addr <= aux_wr_addr +1;
-                    byte_counter <= 32'b0;
-
-                    if (rx_data_valid != 8'b0) begin        // sof (preamble)
-                        state <= s1;
-                    end
-                    else begin
-                        state <= s0;
-                    end
+                    s_axis_tready <= 1'b1;
+                    state <= s0;
                 end
                 
                 s3 : begin                                  // drop current frame
-                    if (rx_good_frame || rx_good_frame_reg || rx_bad_frame  || rx_bad_frame_reg) begin
+                    aux_wr_addr <= commited_wr_address +1;
+                    if (s_axis_tlast && s_axis_tvalid) begin
                         dropped_frames_counter <= dropped_frames_counter +1; 
                         state <= s0;
                     end
