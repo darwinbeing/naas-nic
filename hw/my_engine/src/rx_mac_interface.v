@@ -23,8 +23,7 @@ module rx_mac_interface (
     
     // Internal logic
     output reg    [`BF:0]     commited_wr_address,
-    input                     rd_addr_updated,               //250 MHz domain driven
-    input         [`BF:0]     commited_rd_address              //250 MHz domain driven
+    input         [`BF:0]     commited_rd_address
 
     );
 
@@ -42,8 +41,8 @@ module rx_mac_interface (
     reg     [`BF:0]   aux_wr_addr;
     reg     [`BF:0]   diff;
     (* KEEP = "TRUE" *)reg     [31:0]   dropped_frames_counter;
-    reg     [15:0]    src_port;
-    reg     [15:0]    des_port;
+    reg     [7:0]     src_port;
+    reg     [7:0]     des_port;
     reg     [63:0]    timestamp;
     
     //-------------------------------------------------------
@@ -52,14 +51,6 @@ module rx_mac_interface (
     reg     [31:0]   ts_sec;
     reg     [31:0]   ts_nsec;
     reg     [27:0]   free_running;
-
-    //-------------------------------------------------------
-    // Local 250 MHz signal synch
-    //-------------------------------------------------------
-    reg              rd_addr_updated_reg0;
-    reg              rd_addr_updated_reg1;
-    reg     [`BF:0]  commited_rd_address_reg0;
-    reg     [`BF:0]  commited_rd_address_reg1;
 
     ////////////////////////////////////////////////
     // ts_sec-and-ts_nsec-generation
@@ -85,31 +76,6 @@ module rx_mac_interface (
     end  //always
 
     ////////////////////////////////////////////////
-    // 250 MHz signal synch
-    ////////////////////////////////////////////////
-    always @( posedge clk or negedge reset_n ) begin
-
-        if (!reset_n ) begin  // reset
-            rd_addr_updated_reg0 <= 1'b0;
-            rd_addr_updated_reg1 <= 1'b0;
-            commited_rd_address_reg0 <= 'b0;
-            commited_rd_address_reg1 <= 'b0;
-        end
-        
-        else begin  // not reset
-            rd_addr_updated_reg0 <= rd_addr_updated;
-            rd_addr_updated_reg1 <= rd_addr_updated_reg0;
-
-            commited_rd_address_reg0 <= commited_rd_address;
-
-            if (rd_addr_updated_reg1) begin                                      // transitory off
-                commited_rd_address_reg1 <= commited_rd_address_reg0;
-            end
-
-        end     // not reset
-    end  //always
-
-    ////////////////////////////////////////////////
     // ethernet frame reception and memory write
     ////////////////////////////////////////////////
     always @( posedge clk or negedge reset_n ) begin
@@ -125,7 +91,7 @@ module rx_mac_interface (
         
         else begin  // not reset
             
-            diff <= aux_wr_addr + (~commited_rd_address_reg1) +1;
+            diff <= aux_wr_addr + (~commited_rd_address) +1;
             wr_en <= 1'b1;
             
             case (state)
@@ -138,7 +104,7 @@ module rx_mac_interface (
                     
                     wr_data <= s_axis_tdata;
                     wr_addr <= aux_wr_addr;
-                    if (s_axis_tvalid) begin      // wait for sof (preamble)
+                    if (s_axis_tvalid) begin
                         aux_wr_addr <= aux_wr_addr +1;
                         state <= s1;
                     end
