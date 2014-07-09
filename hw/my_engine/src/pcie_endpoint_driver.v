@@ -30,14 +30,9 @@ module  pci_exp_64b_app (
     output                                        rx_change_huge_page_ack,
     input                                         rx_change_huge_page,
     input                                         rx_send_last_tlp_change_huge_page,
+    output                                        rx_commited_rd_address_change,
     output     [`BF:0]                            rx_commited_rd_address,
     input      [4:0]                              rx_qwords_to_send,
-
-    //-------------------------------------------------------
-    // To mac_rx_interface
-    //-------------------------------------------------------
-    output                                        rx_commited_rd_address_to_mac_change,
-    output     [`BF:0]                            rx_commited_rd_address_to_mac,
 
     //-------------------------------------------------------
     // To mac_host_configuration_interface
@@ -364,10 +359,9 @@ module  pci_exp_64b_app (
         .send_last_tlp_change_huge_page(rx_send_last_tlp_change_huge_page),    // I
         .rd_addr(rx_rd_addr),                          // O [`BF:0]
         .rd_data(rx_rd_data),                          // I [63:0]
-        .commited_rd_address(rx_commited_rd_address),  // O [`BF:0]
         .qwords_to_send(rx_qwords_to_send),            // I [4:0]
-        .commited_rd_address_to_mac_change(rx_commited_rd_address_to_mac_change),            // O 
-        .commited_rd_address_to_mac(rx_commited_rd_address_to_mac),    // O [`BF:0]
+        .commited_rd_address_change(rx_commited_rd_address_change),            // O 
+        .commited_rd_address(rx_commited_rd_address),    // O [`BF:0]
         .my_turn ( rx_turn ),     // I
         .driving_interface ( rx_driven )      // O
         );

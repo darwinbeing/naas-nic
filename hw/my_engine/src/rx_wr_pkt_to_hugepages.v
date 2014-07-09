@@ -35,17 +35,17 @@ module rx_wr_pkt_to_hugepages (
     output reg             huge_page_free_2,
     input                  interrupts_enabled,
 
+    input                  trigger_tlp,     // from another clk domain driven
     output reg             trigger_tlp_ack,
-    input                  trigger_tlp,     // 156.25 MHz domain driven
+    input                  change_huge_page,     // from another clk domain driven
     output reg             change_huge_page_ack,
-    input                  change_huge_page,     // 156.25 MHz domain driven
-    input                  send_last_tlp_change_huge_page,          // 156.25 MHz domain driven
+    input                  send_last_tlp_change_huge_page,          // from another clk domain driven
+    input       [4:0]      qwords_to_send,        // from another clk domain driven
+
     output      [`BF:0]    rd_addr,
     input       [63:0]     rd_data,
+    output reg             commited_rd_address_change,
     output reg  [`BF:0]    commited_rd_address,
-    input       [4:0]      qwords_to_send,        // 156.25 MHz domain driven
-    output reg             commited_rd_address_to_mac_change,        
-    output reg  [`BF:0]    commited_rd_address_to_mac,
 
     // Arbitrations hanshake
 
@@ -78,7 +78,6 @@ module rx_wr_pkt_to_hugepages (
     // Local 156.25 MHz signal synch
     //-------------------------------------------------------
     reg     [4:0]   qwords_to_send_reg0;
-    reg     [4:0]   qwords_to_send_reg1;
     reg             trigger_tlp_reg0;
     reg             trigger_tlp_reg1;
     reg             send_last_tlp_change_huge_page_reg0;
@@ -119,34 +118,31 @@ module rx_wr_pkt_to_hugepages (
     reg     [31:0]  huge_page_qword_counter;
     reg     [31:0]  look_ahead_huge_page_qword_counter;
     reg             endpoint_not_ready;
-    reg     [`BF:0]   rd_addr_extended;
     reg             remember_to_change_huge_page;
-    reg             rd_addr_updated_internal;
-    reg     [`BF:0]   rd_addr_extended_prev1;
-    reg     [`BF:0]   rd_addr_extended_prev2;
+    reg             commited_rd_address_change_internal;
+    reg     [`BF:0] commited_rd_address_internal;
+    reg     [`BF:0]   rd_addr_prev1;
+    reg     [`BF:0]   rd_addr_prev2;
     
     assign reset_n = ~trn_lnk_up_n;
 
     ////////////////////////////////////////////////
-    // 156.25 MHz signal synch
+    // signal synch
     ////////////////////////////////////////////////
     always @( posedge trn_clk or negedge reset_n ) begin
 
         if (!reset_n ) begin  // reset
             qwords_to_send_reg0 <= 5'b0;
-            qwords_to_send_reg1 <= 5'b0;
             trigger_tlp_reg0 <= 1'b0;
             trigger_tlp_reg1 <= 1'b0;
             send_last_tlp_change_huge_page_reg0 <= 1'b0;
             send_last_tlp_change_huge_page_reg1 <= 1'b0;
             change_huge_page_reg0 <= 1'b0;
             change_huge_page_reg1 <= 1'b0;
-
         end
 
         else begin  // not reset
             qwords_to_send_reg0 <= qwords_to_send;
-            qwords_to_send_reg1 <= qwords_to_send_reg0;
 
             trigger_tlp_reg0 <= trigger_tlp;
             trigger_tlp_reg1 <= trigger_tlp_reg0;
@@ -156,7 +152,6 @@ module rx_wr_pkt_to_hugepages (
 
             change_huge_page_reg0 <= change_huge_page;
             change_huge_page_reg1 <= change_huge_page_reg0;
-
         end     // not reset
     end  //always
 
@@ -172,7 +167,7 @@ module rx_wr_pkt_to_hugepages (
             change_huge_page_ack <= 1'b0;
             pulse_gen_fsm2 <= s0;
 
-            commited_rd_address_to_mac_change <= 1'b0;
+            commited_rd_address_change <= 1'b0;
             pulse_gen_fsm3 <= s0;
         end
         else begin  // not reset
@@ -203,9 +198,9 @@ module rx_wr_pkt_to_hugepages (
 
             case (pulse_gen_fsm3)
                 s0 : begin
-                    commited_rd_address_to_mac_change <= 1'b0;
-                    if (rd_addr_updated_internal) begin
-                        commited_rd_address_to_mac_change <= 1'b1;
+                    commited_rd_address_change <= 1'b0;
+                    if (commited_rd_address_change_internal) begin
+                        commited_rd_address_change <= 1'b1;
                         pulse_gen_fsm3 <= s1;
                     end
                 end
@@ -290,8 +285,6 @@ module rx_wr_pkt_to_hugepages (
         end     // not reset
     end  //always
 
-    assign rd_addr = rd_addr_extended[`BF:0];
-
     ////////////////////////////////////////////////
     // write request TLP generation to huge_page
     ////////////////////////////////////////////////
@@ -299,8 +292,8 @@ module rx_wr_pkt_to_hugepages (
 
         if (!reset_n ) begin  // reset
             
-            trn_td <= 64'b0;
-            trn_trem_n <= 8'hFF;
+            trn_td <= 'b0;
+            trn_trem_n <= 'hFF;
             trn_tsof_n <= 1'b1;
             trn_teof_n <= 1'b1;
             trn_tsrc_rdy_n <= 1'b1;
@@ -308,22 +301,21 @@ module rx_wr_pkt_to_hugepages (
 
             endpoint_not_ready <= 1'b0;
 
-            trigger_tlp_ack_internal <= 1'b0;                // must be active for 2 or 3 clks in 250 MHz domain
+            trigger_tlp_ack_internal <= 1'b0;
 
             commited_rd_address <= 'b0;
             next_rd_address <= 'b0;
-            rd_addr_extended <= 'b0;
-            rd_addr_updated_internal <= 1'b0;
-            commited_rd_address_to_mac <= 'b0;
+            rd_addr <= 'b0;
+            commited_rd_address_change_internal <= 1'b0;
 
-            huge_page_qword_counter <= 32'b0;
-            look_ahead_huge_page_qword_counter <= 32'b0;
+            huge_page_qword_counter <= 'b0;
+            look_ahead_huge_page_qword_counter <= 'b0;
 
-            look_ahead_host_mem_addr <= 64'b0;
+            look_ahead_host_mem_addr <= 'b0;
             
-            tlp_qword_counter <= 9'b0;
-            tlp_number <= 32'b0;
-            look_ahead_tlp_number <= 32'b0;
+            tlp_qword_counter <= 'b0;
+            tlp_number <= 'b0;
+            look_ahead_tlp_number <= 'b0;
 
             remember_to_change_huge_page <= 1'b0;
            
@@ -335,16 +327,16 @@ module rx_wr_pkt_to_hugepages (
         
         else begin  // not reset
 
-            rd_addr_updated_internal <= 1'b0;                     // default value. Used to signal a change in commited_rd_address_to_mac to other clock domain
-            rd_addr_extended_prev1 <= rd_addr_extended;
-            rd_addr_extended_prev2 <= rd_addr_extended_prev1;
+            commited_rd_address_change_internal <= 1'b0;
+            rd_addr_prev1 <= rd_addr;
+            rd_addr_prev2 <= rd_addr_prev1;
 
             case (state)
 
                 s0 : begin
-                    host_mem_addr <= current_huge_page_addr + 8'h80;         // first 128 bytes are reserved. DW0 in the huge page contains number of QWs in the huge page
-                    huge_page_qword_counter <= 32'b0;
-                    look_ahead_huge_page_qword_counter <= 32'b0;
+                    host_mem_addr <= current_huge_page_addr + 'h80;
+                    huge_page_qword_counter <= 'b0;
+                    look_ahead_huge_page_qword_counter <= 'b0;
 
                     if (huge_page_available) begin
                         state <= s1;
@@ -353,8 +345,8 @@ module rx_wr_pkt_to_hugepages (
 
                 s1 : begin
                     driving_interface <= 1'b0;                                              // we're taking the risk of starving the tx process
-                    if ( (trn_tbuf_av[1]) && (!trn_tdst_rdy_n) && (my_turn || driving_interface) ) begin          // credits available and endpointready and myturn
-                        if (change_huge_page_reg1 || remember_to_change_huge_page) begin                         // previous module wants to change huge page
+                    if ( (trn_tbuf_av[1]) && (!trn_tdst_rdy_n) && (my_turn || driving_interface) ) begin
+                        if (change_huge_page_reg1 || remember_to_change_huge_page) begin
                             remember_to_change_huge_page <= 1'b0;
                             driving_interface <= 1'b1;
                             state <= s8;
@@ -370,13 +362,13 @@ module rx_wr_pkt_to_hugepages (
                         end
                     end
 
-                    rd_addr_updated_internal <= 1'b1;
-                    commited_rd_address_to_mac <= commited_rd_address;                    // This signal is used to point the position in the buffer so no overrun ocurres. It's used with the above signal
+                    commited_rd_address_change_internal <= 1'b1;
+                    commited_rd_address_to_mac <= commited_rd_address;
 
-                    rd_addr_extended <= commited_rd_address;                            // Address the internal buffer with the last position of the rd pointer
+                    rd_addr <= commited_rd_address;
 
-                    qwords_in_tlp <= {4'b0, qwords_to_send_reg1};
-                    next_rd_address <= commited_rd_address + qwords_to_send_reg1;
+                    qwords_in_tlp <= {4'b0, qwords_to_send_reg0};
+                    next_rd_address <= commited_rd_address + qwords_to_send_reg0;
 
                     endpoint_not_ready <= 1'b0;
 
@@ -405,7 +397,7 @@ module rx_wr_pkt_to_hugepages (
                             };
                     trn_tsof_n <= 1'b0;
                     trn_tsrc_rdy_n <= 1'b0;
-                    rd_addr_extended <= rd_addr_extended +1;      // start addressing internal memory
+                    rd_addr <= rd_addr +1;      // start addressing internal memory
 
                     look_ahead_host_mem_addr <= host_mem_addr + {qwords_in_tlp, 3'b0};                                 // host_addr is at byte level (QWs * 8)
                     look_ahead_huge_page_qword_counter <= huge_page_qword_counter + qwords_in_tlp;
@@ -423,7 +415,7 @@ module rx_wr_pkt_to_hugepages (
                         trigger_tlp_ack_internal <= 1'b1;
 
                         if (!endpoint_not_ready) begin
-                            rd_addr_extended <= rd_addr_extended +1;      // addressing internal memory
+                            rd_addr <= rd_addr +1;      // addressing internal memory
                             state <= s4;
                         end
                         else begin
@@ -432,7 +424,7 @@ module rx_wr_pkt_to_hugepages (
                     end
                     else begin
                         endpoint_not_ready <= 1'b1;
-                        rd_addr_extended <= rd_addr_extended_prev1;          //rd_addr_extended_minus_two
+                        rd_addr <= rd_addr_prev1;          //rd_addr_minus_two
                     end
                     tlp_qword_counter <= 9'b1;
                 end
@@ -443,7 +435,7 @@ module rx_wr_pkt_to_hugepages (
                         trn_tsrc_rdy_n <= 1'b0;
                         trn_td <= {rd_data[7:0], rd_data[15:8], rd_data[23:16], rd_data[31:24], rd_data[39:32], rd_data[47:40], rd_data[55:48] ,rd_data[63:56]};    // DW swap and byte swap      // in vhdl use a for loop
 
-                        rd_addr_extended <= rd_addr_extended +1;      // addressing internal memory
+                        rd_addr <= rd_addr +1;      // addressing internal memory
 
                         tlp_qword_counter <= tlp_qword_counter +1;
                         if (tlp_qword_counter == qwords_in_tlp) begin
@@ -452,7 +444,7 @@ module rx_wr_pkt_to_hugepages (
                         end
                     end
                     else begin
-                        rd_addr_extended <= rd_addr_extended_prev2;          //rd_addr_extended_minus_two
+                        rd_addr <= rd_addr_prev2;          //rd_addr_minus_two
                         state <= s6;
                     end
                 end
@@ -473,7 +465,7 @@ module rx_wr_pkt_to_hugepages (
                 s6 : begin
                     trigger_tlp_ack_internal <= 1'b0;                   // If it came from s4
                     if (!trn_tdst_rdy_n) begin
-                        rd_addr_extended <= rd_addr_extended +1;      // addressing internal memory
+                        rd_addr <= rd_addr +1;      // addressing internal memory
                         trn_tsrc_rdy_n <= 1'b1;
                         state <= s7;
                     end
@@ -481,7 +473,7 @@ module rx_wr_pkt_to_hugepages (
 
                 s7 : begin
                     trn_tsrc_rdy_n <= 1'b1;
-                    rd_addr_extended <= rd_addr_extended +1;      // addressing internal memory
+                    rd_addr <= rd_addr +1;      // addressing internal memory
                     state <= s4;
                 end
                 
@@ -560,81 +552,3 @@ module rx_wr_pkt_to_hugepages (
    
 
 endmodule // rx_wr_pkt_to_hugepages
-
-//[1] the experiment shows that we cannot go too fast to send tlps again
-/*
-                s12 : begin
-                    host_mem_addr <= current_huge_page_addr + 8'h80;         // first 128 bytes are reserved. DW0 in the huge page contains number of QWs in the huge page
-                    huge_page_qword_counter <= 32'b0;
-                    look_ahead_huge_page_qword_counter <= 32'b0;
-
-                    if (!cfg_interrupt_rdy_n) begin                                     // write tlp pkt was sent for the interrupt
-                        cfg_interrupt_n <= 1'b1;
-                        if (huge_page_available) begin
-                            state <= s1;
-                        end
-                        else begin
-                            state <= s0;
-                        end
-                    end
-                end
-*/
-
-
-//[2] speed-up by generating the interrupt manually
-/*
-                s11 : begin
-                    if (!trn_tdst_rdy_n) begin
-                        trn_teof_n <= 1'b1;                                                                 // Back-to-Back transfer
-                        //trn_tsrc_rdy_n <= 1'b0;
-                        trn_td[63:32] <= {
-                                    1'b0,   //reserved
-                                    `TX_MEM_WR64_FMT_TYPE, //memory write request 64bit addressing
-                                    1'b0,   //reserved
-                                    3'b0,   //TC (traffic class)
-                                    4'b0,   //reserved
-                                    1'b0,   //TD (TLP digest present)
-                                    1'b0,   //EP (poisoned data)
-                                    2'b00,  //Relaxed ordering, No snoop in processor cache
-                                    2'b0,   //reserved
-                                    10'h01  //lenght equal 1 DW 
-                                };
-                        trn_td[31:0] <= {
-                                    cfg_completer_id,   //Requester ID
-                                    {4'b0, 4'b0 },   //Tag
-                                    4'h0,   //last DW byte enable
-                                    4'h3    //1st DW byte enable 2 bytes enabled
-                                };
-                        trn_tsof_n <= 1'b0;
-
-                        state <= s12;
-                    end
-                end
-
-                s12: begin
-                    if (!trn_tdst_rdy_n) begin
-                        trn_tsof_n <= 1'b1;
-                        trn_td <= msi_message_addr_reg;
-                        state <= s13;
-                    end
-                end
-
-                s13 : begin
-                    if (!trn_tdst_rdy_n) begin
-                        trn_td <= {msi_message_data_reg[7:0], msi_message_data_reg[15:8], 16'b0, 32'b0};
-                        trn_trem_n <= 8'h0F;
-                        trn_teof_n <= 1'b0;
-                        state <= s14;
-                    end
-                end
-
-                s14 : begin
-                    if (!trn_tdst_rdy_n) begin
-                        trn_td <= 64'b0;
-                        trn_trem_n <= 8'hFF;
-                        trn_teof_n <= 1'b1;
-                        trn_tsrc_rdy_n <= 1'b1;
-                        state <= s0;
-                    end
-                end
-*/

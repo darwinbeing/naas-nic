@@ -148,7 +148,6 @@ module naas_dma (
     // Local Wires rx_tlp_trigger
     //-------------------------------------------------------
     wire   [`BF:0]                                    rx_commited_wr_address;
-    wire   [`BF:0]                                    rx_commited_rd_address;
     wire                                              rx_trigger_tlp_ack;
     wire                                              rx_trigger_tlp;
     wire                                              rx_change_huge_page_ack;
@@ -157,10 +156,11 @@ module naas_dma (
     wire   [4:0]                                      rx_qwords_to_send;
 
     //-------------------------------------------------------
-    // Local Wires rx_mac_interface
+    // Local Wires rx_commited_rd_address_synch_mod
     //-------------------------------------------------------
-    wire   [`BF:0]                                    rx_commited_rd_address_to_mac;
-    wire                                              rx_commited_rd_address_to_mac_change;
+    wire   [`BF:0]                                    rx_commited_rd_address;
+    wire   [`BF:0]                                    rx_commited_rd_address_synch;
+    wire                                              rx_commited_rd_address_synch_mod_reset_n_clk_in;
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Transmition side of the NIC signal declaration
@@ -218,14 +218,28 @@ module naas_dma (
         .clk(s_axis_aclk),                           // I
         .reset_n(s_axis_aresetn),                                      // I
         .commited_wr_address(rx_commited_wr_address),           // I [`BF:0]
-        .commited_rd_address(rx_commited_rd_address),              // I [`BF:0]
-        .trigger_tlp_ack(rx_trigger_tlp_ack),                      // I
+        .commited_rd_address(rx_commited_rd_address_synch),              // I [`BF:0]
         .trigger_tlp(rx_trigger_tlp),                              // O
-        .change_huge_page_ack(rx_change_huge_page_ack),            // I
+        .trigger_tlp_ack(rx_trigger_tlp_ack),                      // I
         .change_huge_page(rx_change_huge_page),                    // O
+        .change_huge_page_ack(rx_change_huge_page_ack),            // I
         .send_last_tlp_change_huge_page(rx_send_last_tlp_change_huge_page),        // O
         .qwords_to_send(rx_qwords_to_send)                         // O [4:0]
         );
+
+    //-------------------------------------------------------
+    // rx_commited_rd_address_synch_mod
+    //-------------------------------------------------------
+    rx_commited_rd_address_synch_mod rx_commited_rd_address_synch_mod (
+        .clk_out(s_axis_aclk),                                   // I
+        .reset_n_clk_out(s_axis_aresetn),                     // I
+        .clk_in(trn_clk_c),                               // I
+        .reset_n_clk_in(rx_commited_rd_address_synch_mod_reset_n_clk_in),                     // I
+        .commited_rd_address_in(rx_commited_rd_address),     // I [`BF:0]
+        .commited_rd_address_out(rx_commited_rd_address_synch)    // O [`BF:0]
+        );
+
+    assign rx_commited_rd_address_synch_mod_reset_n_clk_in = ~trn_lnk_up_n_c;
 
     //-------------------------------------------------------
     // rx_mac_interface
@@ -243,8 +257,7 @@ module naas_dma (
         .wr_data(rx_wr_data),                  // O [63:0]
         .wr_en(rx_wr_en),                      // O
         .commited_wr_address(rx_commited_wr_address),  // O [`BF:0]
-        .commited_rd_address_change(rx_commited_rd_address_to_mac_change),        // I
-        .commited_rd_address(rx_commited_rd_address_to_mac)    // I [`BF:0]
+        .commited_rd_address(rx_commited_rd_address_synch)    // I [`BF:0]
         );
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -330,12 +343,6 @@ module naas_dma (
         .rx_commited_rd_address(rx_commited_rd_address),          // O [`BF:0]
         .rx_qwords_to_send(rx_qwords_to_send),                    // I [4:0]
         
-        //-------------------------------------------------------
-        // To rx_mac_interface
-        //-------------------------------------------------------
-        .rx_commited_rd_address_to_mac_change(rx_commited_rd_address_to_mac_change),                    // O
-        .rx_commited_rd_address_to_mac(rx_commited_rd_address_to_mac),                // O [`BF:0]
-
         //-------------------------------------------------------
         // To mac_host_configuration_interface
         //-------------------------------------------------------
