@@ -129,38 +129,6 @@ module naas_dma (
     wire                                              xaui_clk_156_25_out;
     wire                                              reset_n;
     
-    //-------------------------------------------------------
-    // Local Wires  MAC
-    //-------------------------------------------------------
-    wire                                              mac_tx_underrun;
-    wire   [63:0]                                     mac_tx_data;
-    wire   [7:0]                                      mac_tx_data_valid;
-    wire                                              mac_tx_start;
-    wire                                              mac_tx_ack;
-    wire   [7:0]                                      mac_tx_ifg_delay;
-    wire   [24:0]                                     mac_tx_statistics_vector;
-    wire                                              mac_tx_statistics_valid;
-    wire   [15:0]                                     mac_pause_val;
-    wire                                              mac_pause_req;
-    wire   [63:0]                                     mac_rx_data;
-    wire   [7:0]                                      mac_rx_data_valid;
-    wire                                              mac_rx_good_frame;
-    wire                                              mac_rx_bad_frame;
-    wire   [28:0]                                     mac_rx_statistics_vector;
-    wire                                              mac_rx_statistics_valid;
-    //wire   [68:0]                                     mac_configuration_vector;
-    //wire   [1:0]                                      mac_status_vector;
-    wire   [1:0]                                      mac_host_opcode;
-    wire   [9:0]                                      mac_host_addr;
-    wire   [31:0]                                     mac_host_wr_data;
-    wire   [31:0]                                     mac_host_rd_data;
-    wire                                              mac_host_miim_sel;
-    wire                                              mac_host_req;
-    wire                                              mac_host_miim_rdy;
-    wire                                              mac_mdio_in;
-    wire                                              mac_mdio_out;
-    wire                                              mac_mdio_tri;
-
     //////////////////////////////////////////////////////////////////////////////////////////
     // Reception side of the NIC signal declaration
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -192,7 +160,7 @@ module naas_dma (
     // Local Wires rx_mac_interface
     //-------------------------------------------------------
     wire   [`BF:0]                                    rx_commited_rd_address_to_mac;
-    wire                                              rx_rd_addr_updated;
+    wire                                              rx_commited_rd_address_to_mac_change;
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Transmition side of the NIC signal declaration
@@ -240,15 +208,15 @@ module naas_dma (
         .qdpo(rx_rd_data)           // O [63:0]
         );  //see pg063
 
-    assign rx_wr_clk = xaui_clk_156_25_out;  // 250 MHz
+    assign rx_wr_clk = s_axis_aclk;          // 250 MHz
     assign rx_rd_clk = trn_clk_c;            // 250 MHz
     
     //-------------------------------------------------------
     // rx_tlp_trigger
     //-------------------------------------------------------
     rx_tlp_trigger rx_tlp_trigger_mod (
-        .clk156(xaui_clk_156_25_out),                           // I
-        .reset_n(reset_n),                                      // I
+        .clk(s_axis_aclk),                           // I
+        .reset_n(s_axis_aresetn),                                      // I
         .commited_wr_address(rx_commited_wr_address),           // I [`BF:0]
         .commited_rd_address(rx_commited_rd_address),              // I [`BF:0]
         .trigger_tlp_ack(rx_trigger_tlp_ack),                      // I
@@ -263,17 +231,19 @@ module naas_dma (
     // rx_mac_interface
     //-------------------------------------------------------
     rx_mac_interface rx_mac_interface_mod (
-        .clk(xaui_clk_156_25_out),             // I
-        .reset_n(reset_n),                     // I
-        .rx_data(mac_rx_data),                 // I [63:0]
-        .rx_data_valid(mac_rx_data_valid),     // I [7:0]
-        .rx_good_frame(mac_rx_good_frame),     // I
-        .rx_bad_frame(mac_rx_bad_frame),       // I
+        .clk(s_axis_aclk),             // I
+        .reset_n(s_axis_aresetn),                     // I
+        .s_axis_tdata(s_axis_tdata),                 // I [63:0]
+        .s_axis_tstrb(s_axis_tstrb),     // I [7:0]
+        .s_axis_tuser(s_axis_tuser),     // I [127:0]
+        .s_axis_tvalid(s_axis_tvalid),     // I
+        .s_axis_tlast(s_axis_tlast),       // I
+        .s_axis_tready(s_axis_tready),       // O
         .wr_addr(rx_wr_addr),                  // O [`BF:0]
         .wr_data(rx_wr_data),                  // O [63:0]
         .wr_en(rx_wr_en),                      // O
         .commited_wr_address(rx_commited_wr_address),  // O [`BF:0]
-        .rd_addr_updated(rx_rd_addr_updated),        // I
+        .commited_rd_address_change(rx_commited_rd_address_to_mac_change),        // I
         .commited_rd_address(rx_commited_rd_address_to_mac)    // I [`BF:0]
         );
 
@@ -363,7 +333,7 @@ module naas_dma (
         //-------------------------------------------------------
         // To rx_mac_interface
         //-------------------------------------------------------
-        .rx_rd_addr_updated(rx_rd_addr_updated),                    // O
+        .rx_commited_rd_address_to_mac_change(rx_commited_rd_address_to_mac_change),                    // O
         .rx_commited_rd_address_to_mac(rx_commited_rd_address_to_mac),                // O [`BF:0]
 
         //-------------------------------------------------------

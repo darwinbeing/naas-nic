@@ -44,7 +44,7 @@ module rx_wr_pkt_to_hugepages (
     input       [63:0]     rd_data,
     output reg  [`BF:0]    commited_rd_address,
     input       [4:0]      qwords_to_send,        // 156.25 MHz domain driven
-    output reg             rd_addr_updated,        
+    output reg             commited_rd_address_to_mac_change,        
     output reg  [`BF:0]    commited_rd_address_to_mac,
 
     // Arbitrations hanshake
@@ -172,7 +172,7 @@ module rx_wr_pkt_to_hugepages (
             change_huge_page_ack <= 1'b0;
             pulse_gen_fsm2 <= s0;
 
-            rd_addr_updated <= 1'b0;
+            commited_rd_address_to_mac_change <= 1'b0;
             pulse_gen_fsm3 <= s0;
         end
         else begin  // not reset
@@ -203,9 +203,9 @@ module rx_wr_pkt_to_hugepages (
 
             case (pulse_gen_fsm3)
                 s0 : begin
-                    rd_addr_updated <= 1'b0;
+                    commited_rd_address_to_mac_change <= 1'b0;
                     if (rd_addr_updated_internal) begin
-                        rd_addr_updated <= 1'b1;
+                        commited_rd_address_to_mac_change <= 1'b1;
                         pulse_gen_fsm3 <= s1;
                     end
                 end

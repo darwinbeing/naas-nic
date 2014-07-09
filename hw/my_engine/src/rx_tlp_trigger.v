@@ -4,16 +4,16 @@
 
 module rx_tlp_trigger (
 
-    input    clk156,
+    input    clk,
     input    reset_n,
 
     // Internal logic
-    input      [`BF:0]      commited_wr_address,     // 156.25 MHz domain driven
-    input      [`BF:0]      commited_rd_address,     // 250 MHz domain driven
+    input      [`BF:0]      commited_wr_address,     // this domain driven
+    input      [`BF:0]      commited_rd_address,     // other domain driven
     
-    input                   trigger_tlp_ack,         // 250 MHz domain driven
+    input                   trigger_tlp_ack,         // other domain driven
     output reg              trigger_tlp,
-    input                   change_huge_page_ack,    // 250 MHz domain driven
+    input                   change_huge_page_ack,    // other domain driven
     output reg              change_huge_page,
     output reg              send_last_tlp_change_huge_page,
     output reg [4:0]        qwords_to_send
@@ -23,7 +23,7 @@ module rx_tlp_trigger (
     // Local wires and reg
 
     //-------------------------------------------------------
-    // Local 250 MHz signal synch
+    // Local signal synch
     //-------------------------------------------------------
     reg     [`BF:0]      commited_rd_address_reg;
     reg                  trigger_tlp_ack_reg;
@@ -61,7 +61,7 @@ module rx_tlp_trigger (
     ////////////////////////////////////////////////
     // 250 MHz signal synch
     ////////////////////////////////////////////////
-    always @( posedge clk156 or negedge reset_n ) begin
+    always @( posedge clk or negedge reset_n ) begin
         if (!reset_n ) begin  // reset
             commited_rd_address_reg <= 'b0;
             trigger_tlp_ack_reg <= 1'b0;
@@ -80,7 +80,7 @@ module rx_tlp_trigger (
     ////////////////////////////////////////////////
     // timeout logic
     ////////////////////////////////////////////////
-    always @( posedge clk156 or negedge reset_n ) begin
+    always @( posedge clk or negedge reset_n ) begin
         if (!reset_n ) begin  // reset
             timeout <= 1'b0;
             free_running <= 'b0;
@@ -106,7 +106,7 @@ module rx_tlp_trigger (
     ////////////////////////////////////////////////
     // trigger-logic
     ////////////////////////////////////////////////
-    always @( posedge clk156 or negedge reset_n ) begin
+    always @( posedge clk or negedge reset_n ) begin
         
         if (!reset_n ) begin  // reset
             trigger_tlp <= 1'b0;

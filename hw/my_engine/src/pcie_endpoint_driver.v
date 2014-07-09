@@ -36,7 +36,7 @@ module  pci_exp_64b_app (
     //-------------------------------------------------------
     // To mac_rx_interface
     //-------------------------------------------------------
-    output                                        rx_rd_addr_updated,
+    output                                        rx_commited_rd_address_to_mac_change,
     output     [`BF:0]                            rx_commited_rd_address_to_mac,
 
     //-------------------------------------------------------
@@ -366,7 +366,7 @@ module  pci_exp_64b_app (
         .rd_data(rx_rd_data),                          // I [63:0]
         .commited_rd_address(rx_commited_rd_address),  // O [`BF:0]
         .qwords_to_send(rx_qwords_to_send),            // I [4:0]
-        .rd_addr_updated(rx_rd_addr_updated),            // O 
+        .commited_rd_address_to_mac_change(rx_commited_rd_address_to_mac_change),            // O 
         .commited_rd_address_to_mac(rx_commited_rd_address_to_mac),    // O [`BF:0]
         .my_turn ( rx_turn ),     // I
         .driving_interface ( rx_driven )      // O
