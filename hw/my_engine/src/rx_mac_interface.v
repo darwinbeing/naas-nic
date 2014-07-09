@@ -42,8 +42,9 @@ module rx_mac_interface (
     reg     [`BF:0]   aux_wr_addr;
     reg     [`BF:0]   diff;
     (* KEEP = "TRUE" *)reg     [31:0]   dropped_frames_counter;
-    reg     [7:0]     src_port;
-    reg     [7:0]     des_port;
+    reg     [15:0]    src_port;
+    reg     [15:0]    des_port;
+    reg     [63:0]    timestamp;
     
     //-------------------------------------------------------
     // Local ts_sec-and-ts_nsec-generation
@@ -115,9 +116,8 @@ module rx_mac_interface (
 
         if (!reset_n ) begin  // reset
             commited_wr_address <= 'b0;
-            aux_wr_addr <= 'b1;
-            diff <= 'b0;
-            dropped_frames_counter <= 32'b0;
+            aux_wr_addr <= 'h2;
+            dropped_frames_counter <= 'b0;
             wr_en <= 1'b1;
             s_axis_tready <= 1'b1;
             state <= s0;
@@ -134,6 +134,7 @@ module rx_mac_interface (
                     byte_counter <= s_axis_tuser[15:0];
                     src_port <= s_axis_tuser[23:16];
                     des_port <= s_axis_tuser[31:24];
+                    timestamp <= s_axis_tuser[95:32];
                     
                     wr_data <= s_axis_tdata;
                     wr_addr <= aux_wr_addr;
@@ -151,7 +152,7 @@ module rx_mac_interface (
                     end
 
                     if (diff[`BF:0] > `MAX_DIFF) begin         // buffer is more than 90%
-                        state <= s3;
+                        state <= s4;
                     end
                     else if (s_axis_tlast && s_axis_tvalid) begin
                         s_axis_tready <= 1'b0;
@@ -160,17 +161,24 @@ module rx_mac_interface (
                 end
 
                 s2 : begin
-                    wr_data <= {des_port, src_port, byte_counter, 32'b0};
+                    wr_data <= {16'b0, byte_counter, 8'b0, des_port, 8'b0, src_port};
                     wr_addr <= commited_wr_address;
 
                     commited_wr_address <= aux_wr_addr;                      // commit the packet
+                    aux_wr_addr <= aux_wr_addr +1;
+                    state <= s3;
+                end
+
+                s3 : begin
+                    wr_data <= timestamp;
+                    wr_addr <= wr_addr +1;
                     aux_wr_addr <= aux_wr_addr +1;
                     s_axis_tready <= 1'b1;
                     state <= s0;
                 end
                 
-                s3 : begin                                  // drop current frame
-                    aux_wr_addr <= commited_wr_address +1;
+                s4 : begin                                  // drop current frame
+                    aux_wr_addr <= commited_wr_address + 'h2;
                     if (s_axis_tlast && s_axis_tvalid) begin
                         dropped_frames_counter <= dropped_frames_counter +1; 
                         state <= s0;
