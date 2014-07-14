@@ -8,17 +8,13 @@ module rx_tlp_trigger (
     input    reset_n,
 
     // Internal logic
-    input      [`BF:0]      commited_wr_address,     // this domain driven
-    input      [`BF:0]      commited_rd_address,     // this domain driven
-    
+    input      [`BF:0]      commited_wr_address,
     output reg              trigger_tlp,
-    input                   trigger_tlp_ack,         // other domain driven
-
+    input                   trigger_tlp_ack,
     output reg              change_huge_page,
-    input                   change_huge_page_ack,    // other domain driven
-    
-    output reg              send_last_tlp_change_huge_page,
-    output reg [4:0]        qwords_to_send           // must be valid one cycle before "trigger_tlp" or "send_last_tlp_change_huge_page"
+    input                   change_huge_page_ack,
+    output reg              send_last_tlp,
+    output reg [4:0]        qwords_to_send
     );
 
     // localparam
@@ -41,47 +37,19 @@ module rx_tlp_trigger (
     //-------------------------------------------------------
     // Local trigger-logic
     //-------------------------------------------------------
-    reg     [7:0]        main_fsm;
+    reg     [7:0]        trigger_fsm;
     reg     [`BF:0]      diff;
-    reg     [`BF:0]      last_diff;
-    reg     [3:0]        qwords_remaining;
+    reg     [`BF:0]      diff_reg;
+    reg     [`BF:0]      commited_rd_address;
+    reg     [`BF:0]      look_ahead_commited_rd_address;
+    reg                  huge_page_dirty;
     reg     [18:0]       huge_buffer_qword_counter;
     reg     [18:0]       aux_huge_buffer_qword_counter;
     reg     [18:0]       look_ahead_huge_buffer_qword_counter;
-    reg     [4:0]        number_of_tlp_to_send;
+    reg     [3:0]        qwords_remaining;
     reg     [4:0]        number_of_tlp_sent;
-    reg                  huge_page_dirty;
-    reg     [2:0]        wait_counter;
-
-    //-------------------------------------------------------
-    // Local signal synch
-    //-------------------------------------------------------
-    reg              trigger_tlp_ack_reg0;
-    reg              trigger_tlp_ack_reg1;
-    reg              change_huge_page_ack_reg0;
-    reg              change_huge_page_ack_reg1;
-
-    ////////////////////////////////////////////////
-    // signal synch
-    ////////////////////////////////////////////////
-    always @( posedge clk or negedge reset_n ) begin
-
-        if (!reset_n ) begin  // reset
-            trigger_tlp_ack_reg0 <= 1'b0;
-            trigger_tlp_ack_reg1 <= 1'b0;
-            change_huge_page_ack_reg0 <= 1'b0;
-            change_huge_page_ack_reg1 <= 1'b0;
-        end
-        
-        else begin  // not reset
-            trigger_tlp_ack_reg0 <= trigger_tlp_ack;
-            trigger_tlp_ack_reg1 <= trigger_tlp_ack_reg0;
-
-            change_huge_page_ack_reg0 <= change_huge_page_ack;
-            change_huge_page_ack_reg1 <= change_huge_page_ack_reg0;
-
-        end     // not reset
-    end  //always
+    reg     [4:0]        look_ahead_number_of_tlp_sent;
+    reg     [4:0]        number_of_tlp_to_send;
 
     ////////////////////////////////////////////////
     // timeout logic
@@ -94,7 +62,7 @@ module rx_tlp_trigger (
         
         else begin  // not reset
 
-            if (main_fsm == s0) begin
+            if (trigger_fsm == s0) begin
                 free_running <= free_running +1;
                 timeout <= 1'b0;
                 if (free_running == 'hFFFF) begin
@@ -117,123 +85,111 @@ module rx_tlp_trigger (
         if (!reset_n ) begin  // reset
             trigger_tlp <= 1'b0;
             change_huge_page <= 1'b0;
-            send_last_tlp_change_huge_page <= 1'b0;
+            send_last_tlp <= 1'b0;
 
             diff <= 'b0;
-            last_diff <= 'b0;
-            qwords_remaining <= 'b0;
-            huge_page_dirty <= 1'b0;
-
+            commited_rd_address <= 'b0;
             huge_buffer_qword_counter <= 'h10;
+            huge_page_dirty <= 1'b0;
+            qwords_remaining <= 'b0;
 
-            number_of_tlp_to_send <= 'b0;
-            number_of_tlp_sent <= 'b0;
-
-            main_fsm <= s0;
+            trigger_fsm <= s0;
         end
 
         else begin  // not reset
-            
+
             diff <= commited_wr_address + (~commited_rd_address) +1;
+            
+            case (trigger_fsm)
 
-            case (main_fsm)
-                
                 s0 : begin
-
-                    last_diff <= diff;
                     look_ahead_huge_buffer_qword_counter <= huge_buffer_qword_counter + diff;
+                    diff_reg <= diff;
                     number_of_tlp_to_send <= diff[`BF:4];
-                    qwords_to_send <= 'h10;
 
                     if (diff >= 'h10) begin
-                        main_fsm <= s1;
+                        trigger_fsm <= s1;
                     end
                     else if ( (huge_page_dirty) && (timeout) ) begin
-                        main_fsm <= s6;
+                        trigger_fsm <= ;
                     end
                     else if ( (diff) && (timeout) ) begin
-                        qwords_to_send <= {1'b0, diff[3:0]};
-                        main_fsm <= s4;
+                        trigger_fsm <= ;
                     end
                 end
 
                 s1 : begin
                     huge_page_dirty <= 1'b1;
-
-                    if ( look_ahead_huge_buffer_qword_counter[18] ) begin       // 2MB
-                        if (qwords_remaining == 4'b0) begin
+                    number_of_tlp_sent <= 'b0;
+                    if (look_ahead_huge_buffer_qword_counter[18]) begin       // 2MB
+                        if (!qwords_remaining) begin
                             change_huge_page <= 1'b1;
-                            main_fsm <= s5;
+                            trigger_fsm <= s5;
                         end
                         else begin
                             qwords_to_send <= {1'b0, qwords_remaining};
-                            main_fsm <= s4;
+                            send_last_tlp <= 1'b1;
+                            trigger_fsm <= s5;
                         end
                     end
                     else begin
-                        qwords_remaining <= last_diff[3:0];
+                        qwords_to_send <= 'h10;
                         trigger_tlp <= 1'b1;
-                        number_of_tlp_sent <= 'b0;
-                        main_fsm <= s2;
+                        qwords_remaining <= diff_reg[3:0];
+                        trigger_fsm <= s2;
                     end
                 end
 
                 s2 : begin
-                    aux_huge_buffer_qword_counter <= huge_buffer_qword_counter + 'h10;
-                    if (trigger_tlp_ack_reg1) begin
+                    look_ahead_commited_rd_address <= commited_rd_address + qwords_to_send;
+                    look_ahead_number_of_tlp_sent <= number_of_tlp_sent +1;
+                    aux_huge_buffer_qword_counter <= huge_buffer_qword_counter + qwords_to_send;
+                    if (trigger_tlp_ack) begin
                         trigger_tlp <= 1'b0;
-                        number_of_tlp_sent <= number_of_tlp_sent +1;
-                        main_fsm <= s3;
+                        trigger_fsm <= s3;
                     end
                 end
 
                 s3 : begin
+                    commited_rd_address <= look_ahead_commited_rd_address;
+                    number_of_tlp_sent <= look_ahead_number_of_tlp_sent;
                     huge_buffer_qword_counter <= aux_huge_buffer_qword_counter;
-                    if (number_of_tlp_sent < number_of_tlp_to_send) begin
-                        trigger_tlp <= 1'b1;
-                        main_fsm <= s2;
-                    end
-                    else begin
-                        main_fsm <= s7;
-                    end
+                    trigger_fsm <= s4;
                 end
 
                 s4 : begin
-                    send_last_tlp_change_huge_page <= 1'b1;
-                    main_fsm <= s5;
+                    if (number_of_tlp_sent < number_of_tlp_to_send) begin
+                        trigger_tlp <= 1'b1;
+                        trigger_fsm <= s2;
+                    end
+                    else begin
+                        trigger_fsm <= s0;
+                    end
                 end
 
                 s5 : begin
-                    huge_buffer_qword_counter <= 19'h10;        // the initial offset of a huge page is 32 DWs which are reserved
-                    qwords_remaining <= 4'b0;
-                    huge_page_dirty <= 1'b0;
-                    if (change_huge_page_ack_reg1) begin
-                        send_last_tlp_change_huge_page <= 1'b0;
-                        change_huge_page <= 1'b0;
-                        main_fsm <= s0;
+                    look_ahead_commited_rd_address <= commited_rd_address + qwords_to_send;
+                    if (change_huge_page_ack) begin
+                        change_huge_page <= 1'b1;
+                        send_last_tlp <= 1'b0;
+                        trigger_fsm <= s6;
                     end
                 end
 
                 s6 : begin
-                    if (qwords_remaining == 4'b0) begin
-                        change_huge_page <= 1'b1;
-                        main_fsm <= s5;
-                    end
-                    else begin
-                        qwords_to_send <= {1'b0, qwords_remaining};
-                        main_fsm <= s4;
-                    end
+                    commited_rd_address <= look_ahead_commited_rd_address;
+                    huge_buffer_qword_counter <= 'h10;
+                    qwords_remaining <= 'b0;
+                    huge_page_dirty <= 1'b0;
+                    trigger_fsm <= s7;
                 end
 
-                s7 : begin  // wait synch
-                    wait_counter <= wait_counter +1;
-                    if (wait_counter == 'b011) begin
-                        main_fsm <= s0;
-                    end
+                s7 : begin
+                    trigger_fsm <= s0;
                 end
-
+                
                 default : begin
-                    main_fsm <= s0;
+                    trigger_fsm <= s0;
                 end
 
             endcase
