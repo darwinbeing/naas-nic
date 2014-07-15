@@ -33,6 +33,11 @@ module rx_mac_interface (
     localparam s1 = 8'b00000001;
     localparam s2 = 8'b00000010;
     localparam s3 = 8'b00000100;
+    localparam s4 = 8'b00001000;
+    localparam s5 = 8'b00010000;
+    localparam s6 = 8'b00100000;
+    localparam s7 = 8'b01000000;
+    localparam s8 = 8'b10000000;
 
     //-------------------------------------------------------
     // Local ethernet frame reception and memory write

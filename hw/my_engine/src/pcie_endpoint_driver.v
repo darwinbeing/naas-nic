@@ -1,5 +1,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
+`timescale 1ns / 1ps
+`default_nettype none
 `include "includes.v"
 
 module  pci_exp_64b_app (
@@ -10,7 +12,6 @@ module  pci_exp_64b_app (
     input                                         trn_lnk_up_n,
 
     // Tx Local-Link  //
-
     output     [63:0]                             trn_td,
     output     [7:0]                              trn_trem_n,
     output                                        trn_tsof_n,
@@ -300,10 +301,10 @@ module  pci_exp_64b_app (
         .change_huge_page(rx_change_huge_page),                // I
         .change_huge_page_ack(rx_change_huge_page_ack),        // O
         .send_last_tlp(rx_send_last_tlp),                      // I
-        .rd_addr(rx_rd_addr),                                  // O [`BF:0]
-        .rd_data(rx_rd_data),                                  // I [63:0]
         .qwords_to_send(rx_qwords_to_send),                    // I [4:0]
         .commited_rd_address(rx_commited_rd_address),          // O [`BF:0]
+        .rd_addr(rx_rd_addr),                                  // O [`BF:0]
+        .rd_data(rx_rd_data),                                  // I [63:0]
         .my_turn ( rx_turn ),                                  // I
         .driving_interface ( rx_driven )                       // O
         );

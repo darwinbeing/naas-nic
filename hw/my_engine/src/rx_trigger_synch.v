@@ -1,6 +1,8 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
+`default_nettype none
+`include "includes.v"
 
 module rx_trigger_synch (
 
@@ -30,20 +32,22 @@ module rx_trigger_synch (
     );
 
     // localparam
-    localparam s0 = 8'b00000000;
-    localparam s1 = 8'b00000001;
-    localparam s2 = 8'b00000010;
-    localparam s3 = 8'b00000100;
-    localparam s4 = 8'b00001000;
-    localparam s5 = 8'b00010000;
-    localparam s6 = 8'b00100000;
-    localparam s7 = 8'b01000000;
-    localparam s8 = 8'b10000000;
+    localparam s0  = 10'b0000000000;
+    localparam s1  = 10'b0000000001;
+    localparam s2  = 10'b0000000010;
+    localparam s3  = 10'b0000000100;
+    localparam s4  = 10'b0000001000;
+    localparam s5  = 10'b0000010000;
+    localparam s6  = 10'b0000100000;
+    localparam s7  = 10'b0001000000;
+    localparam s8  = 10'b0010000000;
+    localparam s9  = 10'b0100000000;
+    localparam s10 = 10'b1000000000;
 
     //-------------------------------------------------------
     // Local clk_in - trigger_tlp & send_last_tlp & qwords_to_send
     //-------------------------------------------------------
-    reg     [7:0]    fsm_clk_in;
+    reg     [9:0]    fsm_clk_in;
     reg              trigger_tlp_internal;
     reg              send_last_tlp_internal;
     reg              change_huge_page_internal;
@@ -56,7 +60,7 @@ module rx_trigger_synch (
     //-------------------------------------------------------
     // Local clk_out - trigger_tlp & send_last_tlp & qwords_to_send
     //-------------------------------------------------------
-    reg     [7:0]    fsm_clk_out;
+    reg     [9:0]    fsm_clk_out;
     reg              trigger_tlp_internal_reg0;
     reg              trigger_tlp_internal_reg1;
     reg              trigger_tlp_internal_ack;
@@ -203,7 +207,7 @@ module rx_trigger_synch (
                     else if (send_last_tlp_internal_reg1) begin
                         send_last_tlp_out <= 1'b1;
                         qwords_to_send_out <= qwords_to_send_internal_reg0;
-                        fsm_clk_in <= s4;
+                        fsm_clk_out <= s4;
                     end
                 end
 

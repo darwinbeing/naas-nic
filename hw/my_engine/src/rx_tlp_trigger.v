@@ -20,26 +20,28 @@ module rx_tlp_trigger (
     );
 
     // localparam
-    localparam s0 = 8'b00000000;
-    localparam s1 = 8'b00000001;
-    localparam s2 = 8'b00000010;
-    localparam s3 = 8'b00000100;
-    localparam s4 = 8'b00001000;
-    localparam s5 = 8'b00010000;
-    localparam s6 = 8'b00100000;
-    localparam s7 = 8'b01000000;
-    localparam s8 = 8'b10000000;
+    localparam s0  = 10'b0000000000;
+    localparam s1  = 10'b0000000001;
+    localparam s2  = 10'b0000000010;
+    localparam s3  = 10'b0000000100;
+    localparam s4  = 10'b0000001000;
+    localparam s5  = 10'b0000010000;
+    localparam s6  = 10'b0000100000;
+    localparam s7  = 10'b0001000000;
+    localparam s8  = 10'b0010000000;
+    localparam s9  = 10'b0100000000;
+    localparam s10 = 10'b1000000000;
 
     //-------------------------------------------------------
     // Local timeout-generation
     //-------------------------------------------------------
-    reg     [15:0]   free_running;
-    reg              timeout;   
+    reg     [15:0]       free_running;
+    reg                  timeout;   
 
     //-------------------------------------------------------
     // Local trigger-logic
     //-------------------------------------------------------
-    reg     [7:0]        trigger_fsm;
+    reg     [9:0]        trigger_fsm;
     reg     [`BF:0]      diff;
     reg     [`BF:0]      diff_reg;
     reg     [`BF:0]      commited_rd_address;
@@ -116,7 +118,7 @@ module rx_tlp_trigger (
                         trigger_fsm <= ;
                     end
                     else if ( (diff) && (timeout) ) begin
-                        trigger_fsm <= ;
+                        trigger_fsm <= s10;
                     end
                 end
 
@@ -131,7 +133,7 @@ module rx_tlp_trigger (
                         else begin
                             qwords_to_send <= {1'b0, qwords_remaining};
                             send_last_tlp <= 1'b1;
-                            trigger_fsm <= s5;
+                            trigger_fsm <= s6;
                         end
                     end
                     else begin
@@ -170,24 +172,50 @@ module rx_tlp_trigger (
                 end
 
                 s5 : begin
-                    look_ahead_commited_rd_address <= commited_rd_address + qwords_to_send;
+                    huge_page_dirty <= 1'b0;
+                    huge_buffer_qword_counter <= 'h10;
                     if (change_huge_page_ack) begin
-                        change_huge_page <= 1'b1;
-                        send_last_tlp <= 1'b0;
-                        trigger_fsm <= s6;
+                        change_huge_page <= 1'b0;
+                        trigger_fsm <= s0;
                     end
                 end
 
                 s6 : begin
+                    look_ahead_commited_rd_address <= commited_rd_address + qwords_to_send;
+                    if (change_huge_page_ack) begin
+                        send_last_tlp <= 1'b0;
+                        trigger_fsm <= s7;
+                    end
+                end
+
+                s7 : begin
                     commited_rd_address <= look_ahead_commited_rd_address;
                     huge_buffer_qword_counter <= 'h10;
                     qwords_remaining <= 'b0;
                     huge_page_dirty <= 1'b0;
-                    trigger_fsm <= s7;
+                    trigger_fsm <= s8;
                 end
 
-                s7 : begin
+                s8 : begin
                     trigger_fsm <= s0;
+                end
+
+                s9 : begin
+                    if (!qwords_remaining) begin
+                        change_huge_page <= 1'b1;
+                        trigger_fsm <= s5;
+                    end
+                    else begin
+                        qwords_to_send <= {1'b0, qwords_remaining};
+                        send_last_tlp <= 1'b1;
+                        trigger_fsm <= s6;
+                    end
+                end
+
+                s10 : begin
+                    qwords_to_send <= diff_reg;
+                    send_last_tlp <= 1'b1;
+                    trigger_fsm <= s6;
                 end
                 
                 default : begin

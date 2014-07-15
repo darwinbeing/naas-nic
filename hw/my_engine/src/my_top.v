@@ -1,3 +1,5 @@
+//////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
 `default_nettype none
 `include "includes.v"
@@ -348,12 +350,12 @@ module naas_dma (
         .trn_tbuf_av( trn_tbuf_av_c ),                            // I [4/3:0]
 
         // To rx_tlp_trigger  //
-        .rx_trigger_tlp(rx_trigger_tlp),                          // I
+        .rx_trigger_tlp(rx_trigger_tlp_synch),                    // I
         .rx_trigger_tlp_ack(rx_trigger_tlp_ack),                  // O
-        .rx_change_huge_page(rx_change_huge_page),                // I
+        .rx_change_huge_page(rx_change_huge_page_synch),          // I
         .rx_change_huge_page_ack(rx_change_huge_page_ack),        // O
-        .rx_send_last_tlp(rx_send_last_tlp),                      // I
-        .rx_qwords_to_send(rx_qwords_to_send),                    // I [4:0]
+        .rx_send_last_tlp(rx_send_last_tlp_synch),                // I
+        .rx_qwords_to_send(rx_qwords_to_send_synch),              // I [4:0]
 
         // To rx_mac_interface //
         .rx_commited_rd_address(rx_commited_rd_address),          // O [`BF:0]
@@ -552,3 +554,5 @@ module naas_dma (
 
 
 endmodule // naas_dma
+//////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////
