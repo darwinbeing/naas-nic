@@ -1,6 +1,8 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
+`default_nettype none
+`include "includes.v"
 
 module rx_rd_addr_synch (
 
@@ -95,11 +97,11 @@ module rx_rd_addr_synch (
 
         if (!reset_n_clk_out ) begin  // reset
             commited_rd_address_out <= 'b0;
-            synch_reg0 <= 'b0;
-            synch_reg1 <= 'b0;
+            synch_reg0 <= 1'b0;
+            synch_reg1 <= 1'b0;
         end
         
-        else bebus_reg0gin  // not reset
+        else begin  // not reset
 
             cross_reg0 <= cross;
             synch_reg0 <= synch;

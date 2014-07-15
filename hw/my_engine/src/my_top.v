@@ -23,7 +23,7 @@ module naas_dma (
     input    [127:0]          s_axis_tuser,
     input                     s_axis_tvalid,
     input                     s_axis_tlast,
-    output reg                s_axis_tready,
+    output                    s_axis_tready,
 
     // MAC Tx
     input                     m_axis_aclk,           // 250MHz

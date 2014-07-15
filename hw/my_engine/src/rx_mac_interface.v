@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
 `timescale 1ns / 1ps
+`default_nettype none
 `include "includes.v"
 
 module rx_mac_interface (
@@ -36,45 +37,15 @@ module rx_mac_interface (
     //-------------------------------------------------------
     // Local ethernet frame reception and memory write
     //-------------------------------------------------------
-    reg     [7:0]     state;
+    reg     [7:0]     rx_fsm;
     reg     [15:0]    byte_counter;
     reg     [`BF:0]   aux_wr_addr;
     reg     [`BF:0]   diff;
-    (* KEEP = "TRUE" *)reg     [31:0]   dropped_frames_counter;
+    /*(* KEEP = "TRUE" *)*/reg     [31:0]   dropped_frames_counter;
     reg     [7:0]     src_port;
     reg     [7:0]     des_port;
     reg     [63:0]    timestamp;
     
-    //-------------------------------------------------------
-    // Local ts_sec-and-ts_nsec-generation
-    //-------------------------------------------------------
-    reg     [31:0]   ts_sec;
-    reg     [31:0]   ts_nsec;
-    reg     [27:0]   free_running;
-
-    ////////////////////////////////////////////////
-    // ts_sec-and-ts_nsec-generation
-    ////////////////////////////////////////////////
-    always @( posedge clk or negedge reset_n ) begin
-
-        if (!reset_n ) begin  // reset
-            ts_sec <= 32'b0;
-            ts_nsec <= 32'b0;
-            free_running <= 28'b0;
-        end
-        
-        else begin  // not reset
-            free_running <= free_running +1;
-            ts_nsec <= ts_nsec + 6;
-            if (free_running == 28'd156250000) begin
-              free_running <= 28'b0;
-              ts_sec <= ts_sec +1;
-              ts_nsec <= 32'b0;
-            end
-
-        end     // not reset
-    end  //always
-
     ////////////////////////////////////////////////
     // ethernet frame reception and memory write
     ////////////////////////////////////////////////
@@ -86,7 +57,7 @@ module rx_mac_interface (
             dropped_frames_counter <= 'b0;
             wr_en <= 1'b1;
             s_axis_tready <= 1'b1;
-            state <= s0;
+            rx_fsm <= s0;
         end
         
         else begin  // not reset
@@ -94,7 +65,7 @@ module rx_mac_interface (
             diff <= aux_wr_addr + (~commited_rd_address) +1;
             wr_en <= 1'b1;
             
-            case (state)
+            case (rx_fsm)
 
                 s0 : begin
                     byte_counter <= s_axis_tuser[15:0];
@@ -106,7 +77,7 @@ module rx_mac_interface (
                     wr_addr <= aux_wr_addr;
                     if (s_axis_tvalid) begin
                         aux_wr_addr <= aux_wr_addr +1;
-                        state <= s1;
+                        rx_fsm <= s1;
                     end
                 end
 
@@ -118,11 +89,11 @@ module rx_mac_interface (
                     end
 
                     if (diff[`BF:0] > `MAX_DIFF) begin         // buffer is more than 90%
-                        state <= s4;
+                        rx_fsm <= s4;
                     end
                     else if (s_axis_tlast && s_axis_tvalid) begin
                         s_axis_tready <= 1'b0;
-                        state <= s2;
+                        rx_fsm <= s2;
                     end
                 end
 
@@ -132,7 +103,7 @@ module rx_mac_interface (
 
                     commited_wr_address <= aux_wr_addr;                      // commit the packet
                     aux_wr_addr <= aux_wr_addr +1;
-                    state <= s3;
+                    rx_fsm <= s3;
                 end
 
                 s3 : begin
@@ -140,19 +111,19 @@ module rx_mac_interface (
                     wr_addr <= wr_addr +1;
                     aux_wr_addr <= aux_wr_addr +1;
                     s_axis_tready <= 1'b1;
-                    state <= s0;
+                    rx_fsm <= s0;
                 end
                 
                 s4 : begin                                  // drop current frame
                     aux_wr_addr <= commited_wr_address + 'h2;
                     if (s_axis_tlast && s_axis_tvalid) begin
                         dropped_frames_counter <= dropped_frames_counter +1; 
-                        state <= s0;
+                        rx_fsm <= s0;
                     end
                 end
 
                 default : begin 
-                    state <= s0;
+                    rx_fsm <= s0;
                 end
 
             endcase
