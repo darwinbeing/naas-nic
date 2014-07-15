@@ -38,23 +38,16 @@ module  pci_exp_64b_app (
     output     [`BF:0]                            rx_rd_addr,
     input      [63:0]                             rx_rd_data,
 
-    //-------------------------------------------------------
-    // To internal_true_dual_port_ram TX
-    //-------------------------------------------------------
+    // To internal_true_dual_port_ram TX  //
     output     [`BF:0]                            tx_wr_addr,
     output     [63:0]                             tx_wr_data,
     output                                        tx_wr_en,
 
-    //-------------------------------------------------------
-    // To tx_mac_interface
-    //-------------------------------------------------------
+    // To tx_mac_interface //
     input      [`BF:0]                            tx_commited_rd_addr,
-    input                                         tx_commited_rd_addr_change,
-    output                                        tx_commited_wr_addr_change,
     output     [`BF:0]                            tx_commited_wr_addr,
 
     // Rx Local-Link
-
     input      [63:0]                             trn_rd,
     input      [7:0]                              trn_rrem,
     input                                         trn_rsof_n,
@@ -119,9 +112,9 @@ module  pci_exp_64b_app (
     //-------------------------------------------------------
     // Local Wires PCIe
     //-------------------------------------------------------
-    wire                                              cfg_ext_tag_en;
-    wire   [2:0]                                      cfg_max_rd_req_size;
-    wire   [2:0]                                      cfg_max_payload_size;
+    wire              cfg_ext_tag_en;
+    wire   [2:0]      cfg_max_rd_req_size;
+    wire   [2:0]      cfg_max_payload_size;
 
     //////////////////////////////////////////////////////////////////////////////////////////
     // Reception side of the NIC signal declaration
@@ -177,8 +170,8 @@ module  pci_exp_64b_app (
     wire              tx_read_chunk;
     wire   [8:0]      tx_qwords_to_rd;
     wire              tx_read_chunk_ack;
-    wire              tx_send_huge_page_rd_completed;
-    wire              tx_send_huge_page_rd_completed_ack;
+    wire              tx_send_rd_completed;
+    wire              tx_send_rd_completed_ack;
     wire              tx_send_interrupt;
     wire              tx_send_interrupt_ack;
     wire              tx_notify;
@@ -255,47 +248,47 @@ module  pci_exp_64b_app (
     // rx_huge_pages_addr
     //-------------------------------------------------------
     rx_huge_pages_addr rx_huge_pages_addr_mod (
-        .trn_clk ( trn_clk ),                                  // I
-        .trn_lnk_up_n ( trn_lnk_up_n ),                        // I
-        .trn_rd ( trn_rd ),                                    // I [63:0]
-        .trn_rrem_n ( trn_rrem ),                              // I [7:0]
-        .trn_rsof_n ( trn_rsof_n ),                            // I
-        .trn_reof_n ( trn_reof_n ),                            // I
-        .trn_rsrc_rdy_n ( trn_rsrc_rdy_n ),                    // I
-        .trn_rsrc_dsc_n ( trn_rsrc_dsc_n ),                    // I
-        .trn_rbar_hit_n ( trn_rbar_hit_n ),                    // I [6:0]
-        .trn_rdst_rdy_n ( trn_rdst_rdy_n ),                    // I
-        .huge_page_addr_1 ( rx_huge_page_addr_1 ),             // O [63:0]
-        .huge_page_addr_2 ( rx_huge_page_addr_2 ),             // O [63:0]
-        .huge_page_status_1 ( rx_huge_page_status_1 ),         // O
-        .huge_page_status_2 ( rx_huge_page_status_2 ),         // O
-        .huge_page_free_1 ( rx_huge_page_free_1 ),             // I
-        .huge_page_free_2 ( rx_huge_page_free_2 )              // I
+        .trn_clk(trn_clk),                                     // I
+        .trn_lnk_up_n(trn_lnk_up_n),                           // I
+        .trn_rd(trn_rd),                                       // I [63:0]
+        .trn_rrem_n(trn_rrem),                                 // I [7:0]
+        .trn_rsof_n(trn_rsof_n),                               // I
+        .trn_reof_n(trn_reof_n),                               // I
+        .trn_rsrc_rdy_n(trn_rsrc_rdy_n),                       // I
+        .trn_rsrc_dsc_n(trn_rsrc_dsc_n),                       // I
+        .trn_rbar_hit_n(trn_rbar_hit_n),                       // I [6:0]
+        .trn_rdst_rdy_n(trn_rdst_rdy_n),                       // I
+        .huge_page_addr_1(rx_huge_page_addr_1),                // O [63:0]
+        .huge_page_addr_2(rx_huge_page_addr_2),                // O [63:0]
+        .huge_page_status_1(rx_huge_page_status_1),            // O
+        .huge_page_status_2(rx_huge_page_status_2),            // O
+        .huge_page_free_1(rx_huge_page_free_1),                // I
+        .huge_page_free_2(rx_huge_page_free_2)                 // I
         );
 
     //-------------------------------------------------------
     // rx_wr_pkt_to_hugepages
     //-------------------------------------------------------
     rx_wr_pkt_to_hugepages rx_wr_pkt_to_hugepages_mod (
-        .trn_clk ( trn_clk ),                                  // I
-        .trn_lnk_up_n ( trn_lnk_up_n ),                        // I
-        .trn_td ( rx_trn_td ),                                 // O [63:0]
-        .trn_trem_n ( rx_trn_trem_n ),                         // O [7:0]
-        .trn_tsof_n ( rx_trn_tsof_n ),                         // O
-        .trn_teof_n ( rx_trn_teof_n ),                         // O
-        .trn_tsrc_rdy_n ( rx_trn_tsrc_rdy_n ),                 // O
-        .trn_tdst_rdy_n ( trn_tdst_rdy_n ),                    // I
-        .trn_tbuf_av ( trn_tbuf_av ),                          // I [3:0]
-        .cfg_completer_id ( cfg_completer_id ),                // I [15:0]
-        .cfg_interrupt_n ( rx_cfg_interrupt_n ),               // O
-        .cfg_interrupt_rdy_n ( cfg_interrupt_rdy_n ),          // I
-        .huge_page_addr_1 ( rx_huge_page_addr_1 ),             // I [63:0]
-        .huge_page_addr_2 ( rx_huge_page_addr_2 ),             // I [63:0]
-        .huge_page_status_1 ( rx_huge_page_status_1 ),         // I
-        .huge_page_status_2 ( rx_huge_page_status_2 ),         // I
-        .huge_page_free_1 ( rx_huge_page_free_1 ),             // O
-        .huge_page_free_2 ( rx_huge_page_free_2 ),             // O
-        .interrupts_enabled ( interrupts_enabled ),            // I
+        .trn_clk(trn_clk),                                     // I
+        .trn_lnk_up_n(trn_lnk_up_n),                           // I
+        .trn_td(rx_trn_td),                                    // O [63:0]
+        .trn_trem_n(rx_trn_trem_n),                            // O [7:0]
+        .trn_tsof_n(rx_trn_tsof_n),                            // O
+        .trn_teof_n(rx_trn_teof_n),                            // O
+        .trn_tsrc_rdy_n(rx_trn_tsrc_rdy_n),                    // O
+        .trn_tdst_rdy_n(trn_tdst_rdy_n),                       // I
+        .trn_tbuf_av(trn_tbuf_av),                             // I [3:0]
+        .cfg_completer_id(cfg_completer_id),                   // I [15:0]
+        .cfg_interrupt_n(rx_cfg_interrupt_n),                  // O
+        .cfg_interrupt_rdy_n(cfg_interrupt_rdy_n),             // I
+        .huge_page_addr_1(rx_huge_page_addr_1),                // I [63:0]
+        .huge_page_addr_2(rx_huge_page_addr_2),                // I [63:0]
+        .huge_page_status_1(rx_huge_page_status_1),            // I
+        .huge_page_status_2(rx_huge_page_status_2),            // I
+        .huge_page_free_1(rx_huge_page_free_1),                // O
+        .huge_page_free_2(rx_huge_page_free_2),                // O
+        .interrupts_enabled(interrupts_enabled),               // I
         .trigger_tlp(rx_trigger_tlp),                          // I
         .trigger_tlp_ack(rx_trigger_tlp_ack),                  // O
         .change_huge_page(rx_change_huge_page),                // I
@@ -305,8 +298,8 @@ module  pci_exp_64b_app (
         .commited_rd_address(rx_commited_rd_address),          // O [`BF:0]
         .rd_addr(rx_rd_addr),                                  // O [`BF:0]
         .rd_data(rx_rd_data),                                  // I [63:0]
-        .my_turn ( rx_turn ),                                  // I
-        .driving_interface ( rx_driven )                       // O
+        .my_turn(rx_turn),                                     // I
+        .driving_interface(rx_driven)                          // O
         );
 
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -316,101 +309,105 @@ module  pci_exp_64b_app (
     //////////////////////////////////////////////////////////////////////////////////////////
     // Transmition side of the NIC (START)
     //////////////////////////////////////////////////////////////////////////////////////////
+    //-------------------------------------------------------
+    // tx_huge_pages_addr
+    //-------------------------------------------------------
     tx_huge_pages_addr tx_huge_pages_addr_mod (
-        .trn_clk ( trn_clk ),                       // I
-        .trn_lnk_up_n ( trn_lnk_up_n ),             // I
-        .trn_rd ( trn_rd ),                         // I [63:0]
-        .trn_rrem_n ( trn_rrem ),                   // I [7:0]
-        .trn_rsof_n ( trn_rsof_n ),                 // I
-        .trn_reof_n ( trn_reof_n ),                 // I
-        .trn_rsrc_rdy_n ( trn_rsrc_rdy_n ),         // I
-        .trn_rsrc_dsc_n ( trn_rsrc_dsc_n ),         // I
-        .trn_rbar_hit_n ( trn_rbar_hit_n ),         // I [6:0]
-        .trn_rdst_rdy_n ( trn_rdst_rdy_n ),         // I
-        .huge_page_addr_1 ( tx_huge_page_addr_1 ),     // O [63:0]
-        .huge_page_addr_2 ( tx_huge_page_addr_2 ),     // O [63:0]
-        .huge_page_qwords_1 ( tx_huge_page_qwords_1 ), // O [31:0]
-        .huge_page_qwords_2 ( tx_huge_page_qwords_2 ), // O [31:0]
-        .huge_page_status_1 ( tx_huge_page_status_1 ),  // O
-        .huge_page_status_2 ( tx_huge_page_status_2 ),  // O
-        .huge_page_free_1 ( tx_huge_page_free_1 ),  // I
-        .huge_page_free_2 ( tx_huge_page_free_2 ),  // I
-        .completed_buffer_address ( tx_completed_buffer_address )   // O [63:0]
+        .trn_clk(trn_clk),                                     // I
+        .trn_lnk_up_n(trn_lnk_up_n),                           // I
+        .trn_rd(trn_rd),                                       // I [63:0]
+        .trn_rrem_n(trn_rrem),                                 // I [7:0]
+        .trn_rsof_n(trn_rsof_n),                               // I
+        .trn_reof_n(trn_reof_n),                               // I
+        .trn_rsrc_rdy_n(trn_rsrc_rdy_n),                       // I
+        .trn_rsrc_dsc_n(trn_rsrc_dsc_n),                       // I
+        .trn_rbar_hit_n(trn_rbar_hit_n),                       // I [6:0]
+        .trn_rdst_rdy_n(trn_rdst_rdy_n),                       // I
+        .huge_page_addr_1(tx_huge_page_addr_1),                // O [63:0]
+        .huge_page_addr_2(tx_huge_page_addr_2),                // O [63:0]
+        .huge_page_qwords_1(tx_huge_page_qwords_1),            // O [31:0]
+        .huge_page_qwords_2(tx_huge_page_qwords_2),            // O [31:0]
+        .huge_page_status_1(tx_huge_page_status_1),            // O
+        .huge_page_status_2(tx_huge_page_status_2),            // O
+        .huge_page_free_1(tx_huge_page_free_1),                // I
+        .huge_page_free_2(tx_huge_page_free_2),                // I
+        .completed_buffer_address(tx_completed_buffer_address) // O [63:0]
         );
 
+    //-------------------------------------------------------
+    // tx_rd_host_mem
+    //-------------------------------------------------------
     tx_rd_host_mem tx_rd_host_mem_mod (
-        .trn_clk ( trn_clk ),                       // I
-        .trn_lnk_up_n ( trn_lnk_up_n ),             // I
-
-        .trn_td ( tx_trn_td ),                         // O [63:0]
-        .trn_trem_n ( tx_trn_trem_n ),                 // O [7:0]
-        .trn_tsof_n ( tx_trn_tsof_n ),                 // O
-        .trn_teof_n ( tx_trn_teof_n ),                 // O
-        .trn_tsrc_rdy_n ( tx_trn_tsrc_rdy_n ),         // O
-        .trn_tdst_rdy_n ( trn_tdst_rdy_n ),            // I
-        .trn_tbuf_av ( trn_tbuf_av ),                  // I [3:0]
-        .cfg_completer_id ( cfg_completer_id ),        // I [15:0]
-        .cfg_interrupt_n ( tx_cfg_interrupt_n ),       // O
-        .cfg_interrupt_rdy_n ( cfg_interrupt_rdy_n ),  // I
-
-        .completed_buffer_address ( tx_completed_buffer_address ),  // I [63:0]
-        .huge_page_addr ( tx_huge_page_addr_read_from ),     // I [63:0]
-        .read_chunk ( tx_read_chunk ), // I
-        .tlp_tag ( tx_tlp_tag ),     // O [3:0]
-        .qwords_to_rd ( tx_qwords_to_rd ),  // I [8:0]
-        .read_chunk_ack ( tx_read_chunk_ack ), // O
-        .send_huge_page_rd_completed ( tx_send_huge_page_rd_completed ),  // I
-        .send_huge_page_rd_completed_ack ( tx_send_huge_page_rd_completed_ack ),  // O
-        .notify ( tx_notify ),                                  // I
-        .notification_message ( tx_notification_message ),      // I [63:0]
-        .notify_ack ( tx_notify_ack ),                          // O
-        .send_interrupt ( tx_send_interrupt ),      // I
-        .send_interrupt_ack ( tx_send_interrupt_ack),   // O
-        .my_turn ( tx_turn ),     // I
-        .driving_interface ( tx_driven )      // O
+        .trn_clk(trn_clk),                                     // I
+        .trn_lnk_up_n(trn_lnk_up_n),                           // I
+        .trn_td(tx_trn_td),                                    // O [63:0]
+        .trn_trem_n(tx_trn_trem_n),                            // O [7:0]
+        .trn_tsof_n(tx_trn_tsof_n),                            // O
+        .trn_teof_n(tx_trn_teof_n),                            // O
+        .trn_tsrc_rdy_n(tx_trn_tsrc_rdy_n),                    // O
+        .trn_tdst_rdy_n(trn_tdst_rdy_n),                       // I
+        .trn_tbuf_av(trn_tbuf_av),                             // I [3:0]
+        .cfg_completer_id(cfg_completer_id),                   // I [15:0]
+        .cfg_interrupt_n(tx_cfg_interrupt_n),                  // O
+        .cfg_interrupt_rdy_n(cfg_interrupt_rdy_n),             // I
+        .completed_buffer_address(tx_completed_buffer_address),// I [63:0]
+        .huge_page_addr(tx_huge_page_addr_read_from),          // I [63:0]
+        .read_chunk(tx_read_chunk),                            // I
+        .tlp_tag(tx_tlp_tag),                                  // O [3:0]
+        .qwords_to_rd(tx_qwords_to_rd),                        // I [8:0]
+        .read_chunk_ack(tx_read_chunk_ack),                    // O
+        .send_rd_completed(tx_send_rd_completed),              // I
+        .send_rd_completed_ack(tx_send_rd_completed_ack),      // O
+        .notify(tx_notify),                                    // I
+        .notification_message(tx_notification_message),        // I [63:0]
+        .notify_ack(tx_notify_ack),                            // O
+        .send_interrupt(tx_send_interrupt),                    // I
+        .send_interrupt_ack(tx_send_interrupt_ack),            // O
+        .my_turn(tx_turn),                                     // I
+        .driving_interface(tx_driven)                          // O
         );
 
+    //-------------------------------------------------------
+    // tx_wr_pkt_to_bram
+    //-------------------------------------------------------
     tx_wr_pkt_to_bram tx_wr_pkt_to_bram_mod (
-        .trn_clk ( trn_clk ),                       // I
-        .trn_lnk_up_n ( trn_lnk_up_n ),             // I
-        .trn_rd ( trn_rd ),                         // I [63:0]
-        .trn_rrem_n ( trn_rrem ),                   // I [7:0]
-        .trn_rsof_n ( trn_rsof_n ),                 // I
-        .trn_reof_n ( trn_reof_n ),                 // I
-        .trn_rsrc_rdy_n ( trn_rsrc_rdy_n ),         // I
-        .trn_rsrc_dsc_n ( trn_rsrc_dsc_n ),         // I
-        .trn_rbar_hit_n ( trn_rbar_hit_n ),         // I [6:0]
-        .trn_rdst_rdy_n ( trn_rdst_rdy_n ),         // I
-        .huge_page_addr_1 ( tx_huge_page_addr_1 ),     // I [63:0]
-        .huge_page_addr_2 ( tx_huge_page_addr_2 ),     // I [63:0]
-        .huge_page_qwords_1 ( tx_huge_page_qwords_1 ), // I [31:0]
-        .huge_page_qwords_2 ( tx_huge_page_qwords_2 ), // I [31:0]
-        .huge_page_status_1 ( tx_huge_page_status_1 ),  // I
-        .huge_page_status_2 ( tx_huge_page_status_2 ),  // I
-        .huge_page_free_1 ( tx_huge_page_free_1 ),  // O
-        .huge_page_free_2 ( tx_huge_page_free_2 ),  // O
-        .interrupts_enabled ( interrupts_enabled ), // I
-        .huge_page_addr_read_from ( tx_huge_page_addr_read_from ),  // O [63:0]
-        .read_chunk ( tx_read_chunk ),              // O
-        .tlp_tag ( tx_tlp_tag ),                    // I [3:0]
-        .qwords_to_rd ( tx_qwords_to_rd ),          // O [8:0]
-        .read_chunk_ack ( tx_read_chunk_ack ),      // I
-        .send_huge_page_rd_completed ( tx_send_huge_page_rd_completed ), // O
-        .send_huge_page_rd_completed_ack ( tx_send_huge_page_rd_completed_ack ), // I
-        .notify ( tx_notify ),                                  // O
-        .notification_message ( tx_notification_message ),      // O [63:0]
-        .notify_ack ( tx_notify_ack ),                          // I
-        .send_interrupt ( tx_send_interrupt ),      // O 
-        .send_interrupt_ack ( tx_send_interrupt_ack),   // I
-        .wr_addr ( tx_wr_addr ),                    // O [`BF:0]
-        .wr_data ( tx_wr_data ),                    // O [63:0]
-        .wr_en ( tx_wr_en ),                        // O
-        .commited_rd_addr ( tx_commited_rd_addr ),   // I [`BF:0]
-        .commited_rd_addr_change ( tx_commited_rd_addr_change ),    // I
-        .commited_wr_addr_change ( tx_commited_wr_addr_change ),             // O
-        .commited_wr_addr ( tx_commited_wr_addr )            // O [`BF:0]
+        .trn_clk(trn_clk),                                     // I
+        .trn_lnk_up_n(trn_lnk_up_n),                           // I
+        .trn_rd(trn_rd),                                       // I [63:0]
+        .trn_rrem_n(trn_rrem),                                 // I [7:0]
+        .trn_rsof_n(trn_rsof_n),                               // I
+        .trn_reof_n(trn_reof_n),                               // I
+        .trn_rsrc_rdy_n(trn_rsrc_rdy_n),                       // I
+        .trn_rsrc_dsc_n(trn_rsrc_dsc_n),                       // I
+        .trn_rbar_hit_n(trn_rbar_hit_n),                       // I [6:0]
+        .trn_rdst_rdy_n(trn_rdst_rdy_n),                       // I
+        .huge_page_addr_1(tx_huge_page_addr_1),                // I [63:0]
+        .huge_page_addr_2(tx_huge_page_addr_2),                // I [63:0]
+        .huge_page_qwords_1(tx_huge_page_qwords_1),            // I [31:0]
+        .huge_page_qwords_2(tx_huge_page_qwords_2),            // I [31:0]
+        .huge_page_status_1(tx_huge_page_status_1),            // I
+        .huge_page_status_2(tx_huge_page_status_2),            // I
+        .huge_page_free_1(tx_huge_page_free_1),                // O
+        .huge_page_free_2(tx_huge_page_free_2),                // O
+        .interrupts_enabled(interrupts_enabled),               // I
+        .huge_page_addr_read_from(tx_huge_page_addr_read_from),// O [63:0]
+        .read_chunk(tx_read_chunk),                            // O
+        .tlp_tag(tx_tlp_tag ),                                 // I [3:0]
+        .qwords_to_rd(tx_qwords_to_rd),                        // O [8:0]
+        .read_chunk_ack(tx_read_chunk_ack),                    // I
+        .send_rd_completed(tx_send_rd_completed),              // O
+        .send_rd_completed_ack(tx_send_rd_completed_ack),      // I
+        .notify(tx_notify),                                    // O
+        .notification_message(tx_notification_message),        // O [63:0]
+        .notify_ack(tx_notify_ack),                            // I
+        .send_interrupt(tx_send_interrupt),                    // O 
+        .send_interrupt_ack(tx_send_interrupt_ack),            // I
+        .wr_addr(tx_wr_addr),                                  // O [`BF:0]
+        .wr_data(tx_wr_data),                                  // O [63:0]
+        .wr_en(tx_wr_en),                                      // O
+        .commited_rd_addr(tx_commited_rd_addr),                // I [`BF:0]
+        .commited_wr_addr(tx_commited_wr_addr)                 // O [`BF:0]
         );
-
     //////////////////////////////////////////////////////////////////////////////////////////
     // Transmition side of the NIC (END)
     //////////////////////////////////////////////////////////////////////////////////////////

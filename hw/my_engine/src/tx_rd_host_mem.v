@@ -1,6 +1,7 @@
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
-
+`timescale 1ns / 1ps
+`default_nettype none
 `include "includes.v"
 
 `define TX_MEM_WR64_FMT_TYPE 7'b11_00000
@@ -32,8 +33,8 @@ module tx_rd_host_mem (
     output reg  [3:0]      tlp_tag,
     input       [8:0]      qwords_to_rd,
     output reg             read_chunk_ack,
-    input                  send_huge_page_rd_completed,
-    output reg             send_huge_page_rd_completed_ack,
+    input                  send_rd_completed,
+    output reg             send_rd_completed_ack,
 
     input                  notify,
     input       [63:0]     notification_message,
@@ -98,7 +99,7 @@ module tx_rd_host_mem (
             cfg_interrupt_n <= 1'b1;
 
             read_chunk_ack <= 1'b0;
-            send_huge_page_rd_completed_ack <= 1'b0;
+            send_rd_completed_ack <= 1'b0;
             huge_page_index <= 'b0;
             send_interrupt_ack <= 1'b0;
             notify_ack <= 1'b0;
@@ -111,7 +112,7 @@ module tx_rd_host_mem (
         else begin  // not reset
 
             read_chunk_ack <= 1'b0;
-            send_huge_page_rd_completed_ack <= 1'b0;
+            send_rd_completed_ack <= 1'b0;
             send_interrupt_ack <= 1'b0;
             notify_ack <= 1'b0;
 
@@ -131,9 +132,9 @@ module tx_rd_host_mem (
                                 read_chunk_ack <= 1'b1;
                                 state <= s1;
                             end
-                            else if (send_huge_page_rd_completed) begin
+                            else if (send_rd_completed) begin
                                 driving_interface <= 1'b1;
-                                send_huge_page_rd_completed_ack <= 1'b1;
+                                send_rd_completed_ack <= 1'b1;
                                 state <= s4;
                             end
                             else if (notify) begin

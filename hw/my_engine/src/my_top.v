@@ -30,11 +30,11 @@ module naas_dma (
     // MAC Tx
     input                     m_axis_aclk,           // 250MHz
     input                     m_axis_aresetn,
-    output reg    [63:0]      m_axis_tdata,
-    output reg    [7:0]       m_axis_tstrb,
-    output reg    [127:0]     m_axis_tuser,
-    output reg                m_axis_tvalid,
-    output reg                m_axis_tlast,
+    output        [63:0]      m_axis_tdata,
+    output        [7:0]       m_axis_tstrb,
+    output        [127:0]     m_axis_tuser,
+    output                    m_axis_tvalid,
+    output                    m_axis_tlast,
     input                     m_axis_tready
 
     );//synthesis syn_noclockbuf=1
@@ -178,12 +178,16 @@ module naas_dma (
     wire   [63:0]                                     tx_qspo;
 
     //-------------------------------------------------------
-    // Local Wires tx_mac_interface tx
+    // Local Wires tx_rd_addr_synch
     //-------------------------------------------------------
     wire   [`BF:0]                                    tx_commited_rd_addr;
-    wire                                              tx_commited_rd_addr_change;
-    wire                                              tx_commited_wr_addr_change;
+    wire   [`BF:0]                                    tx_commited_rd_addr_synch;
+
+    //-------------------------------------------------------
+    // Local Wires tx_wr_addr_synch
+    //-------------------------------------------------------
     wire   [`BF:0]                                    tx_commited_wr_addr;
+    wire   [`BF:0]                                    tx_commited_wr_addr_synch;
 
     //-------------------------------------------------------
     // Virtex5-FX Global Clock Buffer
@@ -291,36 +295,59 @@ module naas_dma (
     // internal_true_dual_port_ram tx
     //-------------------------------------------------------
     tx_buffer tx_buffer_mod (
-        .a(tx_wr_addr),                // I [`BF:0]
-        .d(tx_wr_data),                // I [63:0]
-        .dpra(tx_rd_addr),             // I [`BF:0]
-        .clk(tx_wr_clk),               // I 
-        .we(tx_wr_en),                 // I
-        .qdpo_clk(tx_rd_clk),          // I
-        .spo(tx_qspo),                // O [63:0]
-        .dpo(tx_rd_data)              // O [63:0]
+        .a(tx_wr_addr),                                        // I [`BF:0]
+        .d(tx_wr_data),                                        // I [63:0]
+        .dpra(tx_rd_addr),                                     // I [`BF:0]
+        .clk(tx_wr_clk),                                       // I 
+        .we(tx_wr_en),                                         // I
+        .qdpo_clk(tx_rd_clk),                                  // I
+        .spo(tx_qspo),                                         // O [63:0]
+        .dpo(tx_rd_data)                                       // O [63:0]
         );  //see pg063
 
-    assign tx_rd_clk = xaui_clk_156_25_out;  //156.25 MHz
-    assign tx_wr_clk = trn_clk_c;            // 250 MHz
+    assign tx_rd_clk = m_axis_aclk;                            // 250 MHz
+    assign tx_wr_clk = trn_clk_c;                              // 250 MHz
 
     //-------------------------------------------------------
     // tx_mac_interface
     //-------------------------------------------------------
     tx_mac_interface tx_mac_interface_mod (
-        .clk(xaui_clk_156_25_out),                       // I
-        .reset_n(reset_n),                     // I
-        .tx_underrun(mac_tx_underrun),         // O
-        .tx_data(mac_tx_data),                 // O [63:0]
-        .tx_data_valid(mac_tx_data_valid),     // O [7:0]
-        .tx_start(mac_tx_start),               // O
-        .tx_ack(mac_tx_ack),                   // I
-        .rd_addr(tx_rd_addr),                  // O [`BF:0]
-        .rd_data(tx_rd_data),                  // I [63:0]
-        .commited_rd_addr(tx_commited_rd_addr),  // O [`BF:0]
-        .commited_rd_addr_change(tx_commited_rd_addr_change),  // O
-        .commited_wr_addr_change(tx_commited_wr_addr_change),   // I
-        .commited_wr_addr(tx_commited_wr_addr)  // I [`BF:0]
+        .clk(m_axis_aclk),                                     // I
+        .reset_n(m_axis_aresetn),                              // I
+        .m_axis_tdata(m_axis_tdata),                           // O [63:0] 
+        .m_axis_tstrb(m_axis_tstrb),                           // O [7:0] 
+        .m_axis_tuser(m_axis_tuser),                           // O [127:0] 
+        .m_axis_tvalid(m_axis_tvalid),                         // O
+        .m_axis_tlast(m_axis_tlast),                           // O
+        .m_axis_tready(m_axis_tready),                         // I
+        .rd_addr(tx_rd_addr),                                  // O [`BF:0]
+        .rd_data(tx_rd_data),                                  // I [63:0]
+        .commited_rd_addr(tx_commited_rd_addr),                // O [`BF:0]
+        .commited_wr_addr(tx_commited_wr_addr_synch)           // I [`BF:0]
+        );
+
+    //-------------------------------------------------------
+    // tx_rd_addr_synch
+    //-------------------------------------------------------
+    tx_rd_addr_synch tx_rd_addr_synch_mod (
+        .clk_out(trn_clk_c),                                   // I
+        .reset_n_clk_out(reset_n_pcie_domain),                 // I
+        .clk_in(m_axis_aclk),                                  // I
+        .reset_n_clk_in(m_axis_aresetn),                       // I
+        .commited_rd_addr_in(tx_commited_rd_addr),             // I [`BF:0]
+        .commited_rd_addr_out(tx_commited_rd_addr_synch)       // O [`BF:0]
+        );
+
+    //-------------------------------------------------------
+    // tx_wr_addr_synch
+    //-------------------------------------------------------
+    tx_wr_addr_synch tx_wr_addr_synch_mod (
+        .clk_out(m_axis_aclk),                                 // I
+        .reset_n_clk_out(m_axis_aresetn),                      // I
+        .clk_in(trn_clk_c),                                    // I
+        .reset_n_clk_in(reset_n_pcie_domain),                  // I
+        .commited_wr_addr_in(tx_commited_wr_addr),             // I [`BF:0]
+        .commited_wr_addr_out(tx_commited_wr_addr_synch)       // O [`BF:0]
         );
     //////////////////////////////////////////////////////////////////////////////////////////
     // Transmition side of the NIC (END)
@@ -364,20 +391,14 @@ module naas_dma (
         .rx_rd_addr(rx_rd_addr),                                  // O [`BF:0]
         .rx_rd_data(rx_rd_data),                                  // I [63:0]
 
-        //-------------------------------------------------------
-        // To internal_true_dual_port_ram TX
-        //-------------------------------------------------------
-        .tx_wr_addr(tx_wr_addr),                            // O [`BF:0]
-        .tx_wr_data(tx_wr_data),                            // O [63:0]
-        .tx_wr_en(tx_wr_en),                                // O
+        // To internal_true_dual_port_ram TX  //
+        .tx_wr_addr(tx_wr_addr),                                  // O [`BF:0]
+        .tx_wr_data(tx_wr_data),                                  // O [63:0]
+        .tx_wr_en(tx_wr_en),                                      // O
 
-        //-------------------------------------------------------
-        // To tx_mac_interface
-        //-------------------------------------------------------
-        .tx_commited_rd_addr(tx_commited_rd_addr),    // I [`BF:0]
-        .tx_commited_rd_addr_change(tx_commited_rd_addr_change),    // I 
-        .tx_commited_wr_addr_change(tx_commited_wr_addr_change),            // O 
-        .tx_commited_wr_addr(tx_commited_wr_addr),          // O [`BF:0]
+        // To tx_mac_interface  //
+        .tx_commited_rd_addr(tx_commited_rd_addr_synch),          // I [`BF:0]
+        .tx_commited_wr_addr(tx_commited_wr_addr),                // O [`BF:0]
 
         // Rx Local-Link  //
         .trn_rd( trn_rd_c ),                                      // I [63/31:0]

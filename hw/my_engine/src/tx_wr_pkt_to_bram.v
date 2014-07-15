@@ -1,6 +1,8 @@
 
 //////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////
+`timescale 1ns / 1ps
+`default_nettype none
 `include "includes.v"
 
 `define CPL_MEM_RD64_FMT_TYPE 7'b10_01010
@@ -36,8 +38,8 @@ module tx_wr_pkt_to_bram (
     input        [3:0]      tlp_tag,
     output reg   [8:0]      qwords_to_rd,
     input                   read_chunk_ack,
-    output reg              send_huge_page_rd_completed,
-    input                   send_huge_page_rd_completed_ack,
+    output reg              send_rd_completed,
+    input                   send_rd_completed_ack,
 
     output reg              notify,
     output reg   [63:0]     notification_message,
@@ -51,9 +53,7 @@ module tx_wr_pkt_to_bram (
     output reg  [63:0]      wr_data,
     output reg              wr_en,
 
-    input       [`BF:0]     commited_rd_addr,             // 156.25 MHz driven
-    input                   commited_rd_addr_change,      // 156.25 MHz driven
-    output reg              commited_wr_addr_change,      // to 156.25 MHz
+    input       [`BF:0]     commited_rd_addr,
     output reg  [`BF:0]     commited_wr_addr
     );
 
@@ -80,14 +80,6 @@ module tx_wr_pkt_to_bram (
     localparam hp1 = 2'b01;
     localparam hp2 = 2'b10;
 
-    //-------------------------------------------------------
-    // Local 156.25 MHz signal synch
-    //-------------------------------------------------------
-    reg     [`BF:0] commited_rd_addr_reg0;
-    reg     [`BF:0] commited_rd_addr_reg1;
-    reg             commited_rd_addr_change_reg0;
-    reg             commited_rd_addr_change_reg1;
-    
     //-------------------------------------------------------
     // Local current_huge_page_addr
     //-------------------------------------------------------
@@ -158,14 +150,6 @@ module tx_wr_pkt_to_bram (
     reg     [14:0]  notification_mixer_fsm;
 
     //-------------------------------------------------------
-    // Local pulse generation for 156.25 MHz domain
-    //-------------------------------------------------------
-    reg     [14:0]  pulse_gen_fsm1;
-    reg     [1:0]   wait_gap;
-    reg     [`BF:0] commited_wr_addr_aux0;
-    reg     [`BF:0] commited_wr_addr_aux1;
-
-    //-------------------------------------------------------
     // Local completion_tlp & write to bram (wr_to_bram_fsm)
     //-------------------------------------------------------
     reg     [14:0]  wr_to_bram_fsm;
@@ -173,35 +157,9 @@ module tx_wr_pkt_to_bram (
     reg             completion_received;
     reg     [31:0]  dw_aux;
     reg     [`BF:0] look_ahead_wr_addr;
-    reg     [`BF:0] commited_wr_addr_internal;
     reg     [3:0]   this_tlp_tag;
 
     assign reset_n = ~trn_lnk_up_n;
-
-    ////////////////////////////////////////////////
-    // 156.25 MHz signal synch
-    ////////////////////////////////////////////////
-    always @( posedge trn_clk or negedge reset_n ) begin
-
-        if (!reset_n ) begin  // reset
-            commited_rd_addr_reg0 <= 'b0;
-            commited_rd_addr_reg1 <= 'b0;
-            commited_rd_addr_change_reg0 <= 1'b0;
-            commited_rd_addr_change_reg1 <= 1'b0;
-        end
-
-        else begin  // not reset
-            commited_rd_addr_reg0 <= commited_rd_addr;
-
-            commited_rd_addr_change_reg0 <= commited_rd_addr_change;
-            commited_rd_addr_change_reg1 <= commited_rd_addr_change_reg0;
-
-            if (commited_rd_addr_change_reg1) begin
-                commited_rd_addr_reg1 <= commited_rd_addr_reg0;
-            end
-
-        end     // not reset
-    end  //always
 
     ////////////////////////////////////////////////
     // current_huge_page_addr
@@ -293,7 +251,7 @@ module tx_wr_pkt_to_bram (
         if (!reset_n ) begin  // reset
             return_huge_page_to_host <= 1'b0;
             read_chunk <= 1'b0;
-            send_huge_page_rd_completed <= 1'b0;
+            send_rd_completed <= 1'b0;
             diff <= 'b0;
             next_wr_addr <= 'b0;
             trigger_rd_tlp_fsm <= s0;
@@ -302,7 +260,7 @@ module tx_wr_pkt_to_bram (
         else begin  // not reset
 
             return_huge_page_to_host <= 1'b0;
-            diff <= next_wr_addr + (~commited_rd_addr_reg1) + 1;
+            diff <= next_wr_addr + (~commited_rd_addr) + 1;
             remaining_qwords <= current_huge_page_qwords + (~huge_page_qwords_counter) + 1;
 
             aux_diff0 <= diff + remaining_qwords;   // desired
@@ -398,14 +356,14 @@ module tx_wr_pkt_to_bram (
                     end
                     else begin
                         return_huge_page_to_host <= 1'b1;
-                        send_huge_page_rd_completed <= 1'b1;
+                        send_rd_completed <= 1'b1;
                         trigger_rd_tlp_fsm <= s6;
                     end
                 end
 
                 s6 : begin
-                    if (send_huge_page_rd_completed_ack) begin
-                        send_huge_page_rd_completed <= 1'b0;
+                    if (send_rd_completed_ack) begin
+                        send_rd_completed <= 1'b0;
                         trigger_rd_tlp_fsm <= s0;
                     end
                 end
@@ -659,60 +617,6 @@ module tx_wr_pkt_to_bram (
 
 
     ////////////////////////////////////////////////
-    // pulse generation for 156.25 MHz domain   must be active for 3 clks in 250 MHz domain
-    ////////////////////////////////////////////////
-    always @( posedge trn_clk or negedge reset_n ) begin
-        
-        if (!reset_n ) begin  // reset
-            commited_wr_addr <= 'b0;
-            commited_wr_addr_change <= 1'b0;
-            commited_wr_addr_aux1 <= 'b0;
-            pulse_gen_fsm1 <= s0;
-        end
-        else begin  // not reset
-
-            case (pulse_gen_fsm1)
-                
-                s0 : begin
-                    if (commited_wr_addr_internal != commited_wr_addr_aux1) begin
-                        commited_wr_addr_aux0 <= commited_wr_addr_internal;
-                        pulse_gen_fsm1 <= s1;
-                    end
-                    wait_gap <= 'h1;
-                end
-
-                s1 : begin
-                    commited_wr_addr <= commited_wr_addr_aux0;
-                    commited_wr_addr_aux1 <= commited_wr_addr_aux0;
-                    pulse_gen_fsm1 <= s2;
-                end
-
-                s2 : begin
-                    commited_wr_addr_change <= 1'b1;
-                    pulse_gen_fsm1 <= s3;
-                end
-
-                s3 : pulse_gen_fsm1 <= s4;
-                s4 : pulse_gen_fsm1 <= s5;
-
-                s5 : begin
-                    commited_wr_addr_change <= 1'b0;
-                    wait_gap <= wait_gap +1;
-                    if (!wait_gap) begin
-                        pulse_gen_fsm1 <= s0;
-                    end
-                end
-
-                default : begin
-                    pulse_gen_fsm1 <= s0;
-                end
-            endcase
-
-        end     // not reset
-    end  //always
-
-
-    ////////////////////////////////////////////////
     // completion_tlp & write to bram (wr_to_bram_fsm)
     ////////////////////////////////////////////////
     always @( posedge trn_clk or negedge reset_n ) begin
@@ -722,7 +626,7 @@ module tx_wr_pkt_to_bram (
             look_ahead_wr_addr <= 'b0;
             wr_en <= 1'b1;
             completion_received <= 1'b0;
-            commited_wr_addr_internal <= 'b0;
+            commited_wr_addr <= 'b0;
             this_tlp_tag <= 'b0;
             wr_to_bram_fsm <= s0;
         end
@@ -737,7 +641,7 @@ module tx_wr_pkt_to_bram (
 
                 s0 : begin
                     qwords_on_tlp <= trn_rd[41:33];
-                    commited_wr_addr_internal <= look_ahead_wr_addr;
+                    commited_wr_addr <= look_ahead_wr_addr;
                     if ( (!trn_rsrc_rdy_n) && (!trn_rsof_n) && (!trn_rdst_rdy_n)) begin
                         if ( (trn_rd[62:56] == `CPL_MEM_RD64_FMT_TYPE) && (trn_rd[15:13] == `SC) ) begin
                             wr_to_bram_fsm <= s1;
